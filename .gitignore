@@ -1,0 +1,68 @@
+# IDE
+.vscode/
+
+# Data and auxiliary files
+auxTTTEEE_01/
+sterile_TTTEEE_01/
+
+# Benchmarking
+benchmarking/
+
+# MontePython Configuration file
+config/default.conf
+
+# Logs
+logs/
+
+# Cobaya
+likelihood/cobaya_wrapper.py
+
+# Resources
+resources/
+
+# Results
+results/
+
+# Documentation and job scripts
+mpi_guide.md
+example_jobscript.sh
+example_jobscript_mpi.sh
+example_jobscript_gpu_mpi.sh
+*.sh
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS files
+.DS_Store
+Thumbs.db

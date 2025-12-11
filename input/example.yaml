@@ -1,0 +1,52 @@
+likelihood:
+  wrapper: montepython # 'montepython' or 'cobaya'
+  param: input/montepython/base2018TTTEEE_lensing_bao.param # path to the MontePython parameter (.param) or Cobaya input (.yaml) file
+  conf: config/default.conf # path to MontePython config (.conf) file (can be removed or left empty if using Cobaya)
+  path: resources/montepython_public/montepython # path to MontePython (can be removed or left empty if using Cobaya)
+
+data:
+  scalers:
+    parameters: standard # 'standard' or 'minmax' scaling for input parameters
+    targets: standard # 'standard' or 'minmax' scaling for targets (loglkl)
+  initial:
+    n_samples: 5000 # number of initial samples to draw from the likelihood
+    strategy: lhs # initial sampling strategy: 'lhs' (latin hypercube sampling) or 'random'
+    n_std: 10.0 # size of bounding box in terms or standard deviations (corresponding to center ± n_stds * std in each parameter)
+  iterative:
+    n_candidates: 1000 # number of points to draw from mcmc chains that could potentially be added to the training data
+    strategy: adaptive # resampling stratagy: 'adaptive' (respects density and loglkl at a given point) or 'random' (here we accept all candidates)
+    k_NN: 20 # number of neighbors to use in K-Nearest Neighbors calculation for adaptive resampling
+    temperature: 7.0 # training temperature (different from mcmc temperature) which controls how the loglike value is weighted during adaptive resampling
+    update_freq: 50 # parameter that controls how often the KDTree is rebuilt for kNN density estimation
+
+model:
+  n_layers: 5 # number of hidden layers for the neural network
+  n_neurons: 512 # number of neurons in each hidden layer
+  activation: alsing # activation function: accepts standard tensorflow activations functions or the custom 'alsing' and 'custom_tanh' function
+
+training:
+  n_epochs: 5000 # maximum number of epochs to train the network for
+  batch_size: 128 # batch size for training
+  loss: msre # loss function: accepts standard tensorflow loss functions or the custom 'msre' (Mean Square Relative Error) function
+  k_sigma: 3 # number of standard deviations defining the region where the loss is treated as (near-)absolute error before transitioning to relative error 
+  learning_rate: 0.0001 # learning rate for Adam optimizer
+  val_split: 0.1 # validation split (0.1 = use randomly 10% of training data for validation)
+  patience: 250 # patience in terms of epochs for early stopping (with restore_best_weights = True)
+
+sampling:
+  save_chains: false # whether to save the training chains to disk
+  temperature: 7.0 # mcmc sampling temperature: utilized as (1 / T) * logpost (where T is the temperature and logpost = loglkl + logprior)
+  method: emcee # mcmc sampler (currently only supports the emcee affine invariant ensemble sampler)
+  emcee:
+    n_walkers: 216 # number of walkers to use
+    max_steps: 100000 # maximum number of steps to take
+    burn_in: 5000 # number of steps to discard as burn-in
+    ess_target: 50 # target effective sample size
+    delta_tau_tol: 0.05 # tolerance for delta tau
+    chunk_size: 5000 # size of chunks for processing
+    ac_thin: 10 # thinning factor for autocorrelation calculation
+
+convergence:
+  r_minus_one_threshold: 0.01 # threshold for Gelman-Rubin statistic (R-1) below which convergence is achieved
+  max_iterations: 20 # maximum number of iterations to prevent infinite loops
+    

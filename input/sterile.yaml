@@ -1,0 +1,51 @@
+likelihood:
+  wrapper: montepython
+  param: input/montepython/sterileLCDM_TTTEEE_lensing_bao.param
+  conf: config/default.conf
+  path: resources/montepython_public/montepython
+
+data:
+  scalers:
+    parameters: standard
+    targets: standard
+  initial:
+    n_samples: 5000
+    strategy: lhs
+    n_std: 10.0
+  iterative:
+    n_candidates: 1000
+    strategy: adaptive
+    k_NN: 20
+    temperature: 7.0
+    update_freq: 50
+
+model:
+  n_layers: 5
+  n_neurons: 512
+  activation: alsing
+
+training:
+  n_epochs: 5000
+  batch_size: 128
+  loss: msre 
+  k_sigma: 3 
+  learning_rate: 0.0001
+  val_split: 0.1
+  patience: 250
+
+sampling:
+  save_chains: false
+  temperature: 7.0
+  method: emcee
+  emcee:
+    n_walkers: 232
+    max_steps: 100000
+    burn_in: 5000
+    ess_target: 50
+    delta_tau_tol: 0.05
+    chunk_size: 5000
+    ac_thin: 10
+
+convergence:
+  r_minus_one_threshold: 0.01
+  max_iterations: 20
