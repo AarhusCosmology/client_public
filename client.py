@@ -10,7 +10,7 @@ from config.run_manager import write_run_log, append_convergence_info
 from metrics.metrics_tracker import MetricsTracker
 from metrics.convergence import check_convergence
 from likelihood.montepython_wrapper import MontePythonLikelihood
-from likelihood.cobaya_wrapper import CobayaLikelihood
+# from likelihood.cobaya_wrapper import CobayaLikelihood
 from scaling.scaling import make_scalers, save_scalers
 from sampling.initial_sampler import generate_samples
 from utils.mpi_utils import (

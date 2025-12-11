@@ -47,5 +47,5 @@ sampling:
     ac_thin: 10
 
 convergence:
-  r_minus_one_threshold: 0.01
-  max_iterations: 20
+  r_minus_one_threshold: 0
+  max_iterations: 50
