@@ -53,9 +53,9 @@ python client.py input/example.yaml --name my_run
 
 ### Example Configurations
 
-- `input/example.yaml` - Base ΛCDM with Planck 2018 TT,TE,EE+lowE+lensing+BAO
-- `input/sterile.yaml` - Sterile neutrino extension (N<sub>s</sub>m<sub>s</sub>ΛCDM)
-- `input/test.yaml` - Quick test configuration
+- `input/base2018TTTEEE_lensing_bao.yaml` - Base ΛCDM with Planck 2018 TT,TE,EE+lowE+lensing+BAO
+- `input/sterileLCDM_TTTEEE_lensing_bao.yaml` - Sterile neutrino extension (N<sub>s</sub>m<sub>s</sub>ΛCDM)
+- `input/example.yaml` - Quick test configuration
 
 ## Algorithm Overview
 
