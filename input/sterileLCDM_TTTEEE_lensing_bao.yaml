@@ -1,6 +1,6 @@
 likelihood:
   wrapper: montepython
-  param: input/montepython/base2018TTTEEE_lite.param
+  param: input/montepython/sterileLCDM_TTTEEE_lensing_bao.param
   conf: config/default.conf
   path: resources/montepython_public/montepython
 
@@ -26,19 +26,19 @@ model:
 
 training:
   n_epochs: 5000
-  batch_size: 128 
+  batch_size: 128
   loss: msre 
   k_sigma: 3 
-  learning_rate: 0.0001 
-  val_split: 0.1 
-  patience: 250 
+  learning_rate: 0.0001
+  val_split: 0.1
+  patience: 250
 
 sampling:
-  save_chains: false 
+  save_chains: false
   temperature: 7.0
-  method: emcee 
+  method: emcee
   emcee:
-    n_walkers: 56
+    n_walkers: 232
     max_steps: 100000
     burn_in: 5000
     ess_target: 50
@@ -49,4 +49,3 @@ sampling:
 convergence:
   r_minus_one_threshold: 0.01
   max_iterations: 20
-    

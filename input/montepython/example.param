@@ -1,0 +1,30 @@
+#------Experiments to test (separated with commas)-----
+
+data.experiments=['sh0es', 'bao']
+
+#------ Parameter list -------
+
+# Cosmological parameters list
+
+# data.parameters[class name] = [mean, min, max, 1-sigma, scale, role]
+# - if min max irrelevant, put to None
+# - if fixed, put 1-sigma to 0
+# - if scale irrelevant, put to 1, otherwise to the appropriate factor
+# - role is either 'cosmo', 'nuisance' or 'derived'. You should put the derived
+# parameters at the end, and in case you are using the `-j fast` Cholesky
+# decomposition, you should order your nuisance parameters from slowest to
+# fastest.
+
+data.parameters['h']         = [0.70, 0.55, 0.85, 0.008, 1, 'cosmo']
+data.parameters['omega_cdm'] = [0.12, 0.05, 0.30, 0.006, 1, 'cosmo']
+
+data.parameters['omega_b']   = [0.02237, 0.02237, 0.02237, 0.0, 1, 'cosmo']
+data.parameters['n_s']       = [0.965,   0.965,   0.965,   0.0, 1, 'cosmo']
+data.parameters['A_s']       = [2.1e-9,  2.1e-9,  2.1e-9,  0.0, 1, 'cosmo']
+data.parameters['tau_reio']  = [0.054,   0.054,   0.054,   0.0, 1, 'cosmo']
+
+
+#------ Mcmc parameters ----
+
+data.N=10
+data.write_step=5
