@@ -46,14 +46,18 @@ class IterationMetrics:
     resampling: Optional[ResamplingMetrics] = None
 
 class MetricsTracker:
-    def __init__(self, results_dir: str):
+    def __init__(self, results_dir: str, start_iteration: int = 0):
         self.results_dir = Path(results_dir)
         self.metrics_file = self.results_dir / "metrics.log"
+        self.start_iteration = start_iteration
         self.training_metrics = []
         self.sampling_metrics = []
         self.resampling_metrics = []
         self.iteration_metrics = []
         self.convergence_metrics = {}
+        
+        if start_iteration > 0 and self.metrics_file.exists():
+            self._load_existing_metrics(start_iteration)
     
     def add_training_metrics(self, iteration: int, epochs_trained: int, 
                            final_train_loss: float, final_val_loss: float,
@@ -220,3 +224,90 @@ class MetricsTracker:
             self._write_resampling_metrics(f)
             self._write_convergence_metrics(f)
             self._write_iteration_metrics(f)
+    
+    def _load_existing_metrics(self, start_iteration: int) -> None:
+        import re
+        
+        with open(self.metrics_file, 'r') as f:
+            content = f.read()
+        
+        def parse_training_section(content):
+            match = re.search(r'Training Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
+            if not match:
+                return []
+            metrics = []
+            for line in match.group(1).strip().split('\n'):
+                parts = [p.strip() for p in line.split('|')]
+                if parts[0] == 'avg':
+                    continue
+                it, epochs, loss, val_loss, time = int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])*60
+                if it < start_iteration:
+                    metrics.append(TrainingMetrics(it, epochs, loss, val_loss, time))
+            return metrics
+        
+        def parse_sampling_section(content):
+            match = re.search(r'Sampling Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
+            if not match:
+                return []
+            metrics = []
+            for line in match.group(1).strip().split('\n'):
+                parts = [p.strip() for p in line.split('|')]
+                if parts[0] == 'avg':
+                    continue
+                it, steps, ar = int(parts[0]), int(parts[1]), float(parts[2])
+                tau_str = parts[3]
+                tau = float(tau_str) if tau_str != 'N/A' else None
+                converged = parts[4] == 'True'
+                time = float(parts[5])*60
+                if it < start_iteration:
+                    metrics.append(SamplingMetrics(it, steps, ar, time, tau, converged))
+            return metrics
+        
+        def parse_resampling_section(content):
+            match = re.search(r'Resampling Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
+            if not match:
+                return []
+            metrics = []
+            for line in match.group(1).strip().split('\n'):
+                parts = [p.strip() for p in line.split('|')]
+                if parts[0] == 'tot':
+                    continue
+                it, processed, accepted = int(parts[0]), int(parts[1]), int(parts[2])
+                rejected_emulated, rejected_true = int(parts[4]), int(parts[5])
+                evals, time = int(parts[6]), float(parts[7])*60
+                n_initial = evals - accepted - rejected_true if it == 0 else 0
+                if it < start_iteration:
+                    metrics.append(ResamplingMetrics(it, processed, rejected_emulated, rejected_true, accepted, time, n_initial))
+            return metrics
+        
+        def parse_convergence_section(content):
+            match = re.search(r'Convergence Metrics.*?\n-+\nit.*?\n-+\n(.*?)(?:\n\n|$)', content, re.DOTALL)
+            if not match:
+                return {}
+            metrics = {}
+            for line in match.group(1).strip().split('\n'):
+                parts = [p.strip() for p in line.split('|')]
+                it = int(parts[0])
+                if it < start_iteration:
+                    metrics[it] = {'r_minus_one': float(parts[1]), 'converged': parts[2] == 'True'}
+            return metrics
+        
+        def parse_iteration_section(content):
+            match = re.search(r'Per-Iteration Runtime:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
+            if not match:
+                return []
+            metrics = []
+            for line in match.group(1).strip().split('\n'):
+                parts = [p.strip() for p in line.split('|')]
+                if parts[0] == 'tot':
+                    continue
+                it, total = int(parts[0]), float(parts[1])*60
+                if it < start_iteration:
+                    metrics.append(IterationMetrics(it, total))
+            return metrics
+        
+        self.training_metrics = parse_training_section(content)
+        self.sampling_metrics = parse_sampling_section(content)
+        self.resampling_metrics = parse_resampling_section(content)
+        self.convergence_metrics = parse_convergence_section(content)
+        self.iteration_metrics = parse_iteration_section(content)

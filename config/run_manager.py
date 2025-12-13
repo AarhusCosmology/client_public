@@ -49,11 +49,13 @@ def write_run_log(cfg, config_name, append=False):
     log_path = Path(cfg.run_dir) / 'run.log'
     config_path = _resolve_config_path(config_name)
     
-    if config_path.exists():
+    if not append and config_path.exists():
         config_contents = config_path.read_text()
-        saved_config_name = _save_config_copy(cfg, config_path.name, config_contents, append)
+        saved_config_name = _save_config_copy(cfg, config_path.name, config_contents, append=False)
     else:
-        saved_config_name = config_name
+        yaml_in_dir = list(Path(cfg.run_dir).glob('*.yaml'))
+        yaml_in_dir = [f for f in yaml_in_dir if not f.name.startswith('2025')]
+        saved_config_name = yaml_in_dir[0].name if yaml_in_dir else config_name
     
     log_entry = _format_log_entry(cfg, saved_config_name)
     

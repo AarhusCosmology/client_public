@@ -1,6 +1,6 @@
 # CLiENT
 
-**CLiENT** (Cosmological Likelihood Emulator using Neural networks with TensorFlow) is a framework for emulating cosmological likelihood functions, bypassing the need for Einstein-Boltzmann solver codes like CLASS and CAMB for evaluation of the likelihood. CLiENT compares to observable emulators like CONNECT, but has the advantage of producing a surrogate likelihood which is completely auto-differentiable. 
+**CLiENT** (Cosmological Likelihood Emulator using Neural networks with TensorFlow) is a framework for emulating cosmological likelihood functions, bypassing the need for Einstein-Boltzmann solver codes like [CLASS](https://github.com/lesgourg/class_public) and [CAMB](https://github.com/cmbant/CAMB) for evaluation of the likelihood. CLiENT compares to observable emulators like [CONNECT](https://github.com/AarhusCosmology/connect_public), but has the advantage of producing a surrogate likelihood which is completely auto-differentiable. 
 
 ## Getting Started
 
@@ -29,27 +29,68 @@ echo "conda activate clienv" >> ~/.bashrc
 
 ### Prerequisites
 
-CLiENT requires working installations of CLASS and either MontePython or Cobaya (not yet implemented). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
+CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya) (not yet implemented). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
 
 **Performance Note**: CLiENT benefits significantly from GPU acceleration with CUDA support. The neural network training (TensorFlow) and MCMC sampling (emcee) both leverage GPU resources when available, substantially reducing computation time. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
 
 ## Usage
 
-Basic usage:
+### Running CLiENT
+
+Start a new run:
 
 ```bash
-python client.py input/example.yaml --name my_run
+python client.py input/example.yaml -n my_run
+```
+
+Continue from an existing run:
+
+```bash
+python client.py results/my_run_directory
+```
+
+Continue with MCMC-only mode (skip retraining at starting iteration):
+
+```bash
+python client.py results/my_run_directory -m
 ```
 
 ### Command Line Options
 
-- `input` (positional, required): Input configuration YAML file
-- `-n`, `--name`: Run name/tag for output organization
+**New Run Mode:**
+- `-n`, `--name`: Optional run name/tag for output organization
 - `-o`, `--output`: Base results directory (default: `results`)
-- `-c`, `--continue DIR`: Resume from DIR with retraining
-- `-m`, `--mcmc-continue DIR`: Resume from DIR without retraining
-- `-s`, `--start-it N`: Starting iteration (required for continue modes)
 - `-i`, `--n-it N`: Number of iterations (overrides convergence criterion)
+
+**Continue Mode:**
+- `-m`, `--mcmc`: Skip retraining for the starting iteration
+- `-s`, `--start-it N`: Starting iteration (auto-detected from latest if not specified)
+- `-i`, `--n-it N`: Number of (additional) iterations (overrides convergence criterion)
+
+CLiENT automatically detects the mode based on whether the path is a directory (continue) or file (new run).
+
+### Benchmarking
+
+Compare surrogate likelihood against true MontePython chains:
+
+```bash
+python benchmarking/benchmark.py results/my_run_directory
+```
+
+Benchmark options:
+- `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
+- `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
+- `--thin N`: Thinning factor for emcee chains (default: 1)
+- `--params N1 N2 ...`: Parameter indices to include in analysis
+- `--chains DIR`: Path to MontePython chains directory for comparison
+- `--no-training-data`: Skip loading training data visualization
+- `--no-training-history`: Skip loading training history
+
+The benchmark script generates:
+- Triangle plots comparing posteriors
+- KL divergence metrics between distributions
+- MAP point comparisons
+- Convergence diagnostics
 
 ### Example Configurations
 
@@ -176,16 +217,19 @@ convergence:
 
 ```
 results/YYYYMMDD_HHMMSS_run_name/
-├── scalers/              # Standard/MinMax scalers per iteration
-├── training_data/        # HDF5 datasets (x, y) per iteration
-├── trained_models/       # Keras models (.keras format)
-├── training_history/     # Training histories as .pkl files (loss, val_loss)
-├── training_chains/      # emcee chains (if save_chains: true)
-├── convergence_stats/    # R-1 statistics and chain statistics
-├── metrics.log           # Various metrics for the CLiENT pipeline
-├── run.log               # Complete run configuration and timing
-└── example.yaml          # Copy of the input file
+├── scalers/                  # Standard/MinMax scalers per iteration
+├── training_data/            # HDF5 datasets (x, y) per iteration
+├── trained_models/           # Keras models (.keras format)
+├── training_history/         # Training histories as .pkl files (loss, val_loss)
+├── training_chains/          # emcee chains (if save_chains: true)
+├── convergence_stats/        # R-1 statistics and chain statistics
+├── benchmark_chains/         # Benchmark MCMC chains (from benchmark.py)
+├── metrics.log               # Various metrics for the CLiENT pipeline
+├── run.log                   # Complete run configuration and timing
+└── example.yaml              # Copy of the input configuration file
 ```
+
+**Note on Continue Mode**: When continuing from an existing run, the original YAML configuration is preserved.
 
 ## MPI Support
 

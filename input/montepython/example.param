@@ -23,7 +23,6 @@ data.parameters['n_s']       = [0.965,   0.965,   0.965,   0.0, 1, 'cosmo']
 data.parameters['A_s']       = [2.1e-9,  2.1e-9,  2.1e-9,  0.0, 1, 'cosmo']
 data.parameters['tau_reio']  = [0.054,   0.054,   0.054,   0.0, 1, 'cosmo']
 
-
 #------ Mcmc parameters ----
 
 data.N=10

@@ -9,11 +9,11 @@ new_TTTEEE_01/
 test_gaussian/
 test2/
 
-# Benchmarking
-benchmarking/
-
 # MontePython Configuration file
 config/default.conf
+
+# Example chains
+example_chains/
 
 # Logs
 logs/

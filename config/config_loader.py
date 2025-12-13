@@ -7,6 +7,34 @@ from datetime import datetime
 
 SUBDIRECTORIES = ['scalers', 'training_data', 'trained_models', 'training_history', 'training_chains', 'convergence_stats']
 
+def _find_latest_iteration(run_dir):
+    training_data_dir = run_dir / 'training_data'
+    if not training_data_dir.exists():
+        return 0
+    
+    data_files = list(training_data_dir.glob('data_it_*.h5'))
+    if not data_files:
+        return 0
+    
+    iterations = []
+    for f in data_files:
+        try:
+            it_num = int(f.stem.split('_')[-1])
+            iterations.append(it_num)
+        except ValueError:
+            continue
+    
+    return max(iterations) if iterations else 0
+
+def _find_yaml_in_dir(directory):
+    yaml_files = list(Path(directory).glob('*.yaml'))
+    yaml_files = [f for f in yaml_files if not f.name.startswith('2025')]
+    if not yaml_files:
+        raise FileNotFoundError(f"No .yaml configuration file found in {directory}")
+    if len(yaml_files) > 1:
+        print(f"Warning: Multiple .yaml files found in {directory}. Using {yaml_files[0].name}")
+    return yaml_files[0]
+
 def create_run_directory(run_name=None, base_results_dir='results'):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"{timestamp}_{run_name}" if run_name else timestamp
@@ -78,23 +106,33 @@ def create_base_namespace(config):
     )
 
 def load_config_cli(args):
-    with open(args.input) as f:
-        config = yaml.safe_load(f)
-    
-    namespace = create_base_namespace(config)
-    
-    continue_dir = args.continue_dir or args.mcmc_continue_dir
-
-    if continue_dir:
-        run_mode = 'mcmc_continue' if args.mcmc_continue_dir else 'continue'
-        if args.start_it is None:
-            raise ValueError(f"--start-it must be specified when using --{run_mode.replace('_', '-')}")
+    if args.mode == 'continue':
+        run_dir = Path(args.run_dir)
+        if not run_dir.exists():
+            raise FileNotFoundError(f"Run directory not found: {run_dir}")
         
-        run_dir = Path(continue_dir)
+        yaml_file = _find_yaml_in_dir(run_dir)
+        with open(yaml_file) as f:
+            config = yaml.safe_load(f)
+        
+        namespace = create_base_namespace(config)
+        
+        run_mode = 'mcmc_continue' if args.mcmc else 'continue'
         run_id = run_dir.name
-        start_it = args.start_it
+        
+        if args.start_it is None:
+            start_it = _find_latest_iteration(run_dir)
+            print(f"Auto-detected latest iteration: {start_it}")
+        else:
+            start_it = args.start_it
+        
         subdirs = {name: str(run_dir / name) for name in SUBDIRECTORIES}
     else:
+        with open(args.input) as f:
+            config = yaml.safe_load(f)
+        
+        namespace = create_base_namespace(config)
+        
         run_mode = 'default'
         run_id, run_dir_str, subdirs = create_run_directory(args.name, args.output)
         run_dir = Path(run_dir_str)

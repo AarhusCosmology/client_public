@@ -26,22 +26,36 @@ from utils.mpi_utils import (
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='CLiENT: Cosmological Likelihood Emulator using Neural networks with Tensorflow')
-    parser.add_argument('input', help='Input configuration YAML file')
-    parser.add_argument('-n', '--name', help='Optional run name/tag for organization')
-    parser.add_argument('-o', '--output', default='results', help='Base directory for results')
-    parser.add_argument('-c', '--continue', dest='continue_dir', help='Run directory to continue from (with retraining)')
-    parser.add_argument('-m', '--mcmc-continue', dest='mcmc_continue_dir', help='Run directory to continue from (without retraining)')
-    parser.add_argument('-s', '--start-it', type=int, help='Starting iteration (required for continue modes)')
-    parser.add_argument('-i', '--n-it', type=int, help='Number of iterations to run (overrides convergence criterion if specified)')
-    return parser.parse_args()
+    
+    parser.add_argument('input_or_dir', help='Input YAML file (new run) or run directory (continue)')
+    parser.add_argument('-n', '--name', help='Run name/tag for organization (new runs only)')
+    parser.add_argument('-o', '--output', default='results', help='Base directory for results (new runs only)')
+    parser.add_argument('-m', '--mcmc', action='store_true', help='Skip retraining for starting iteration (continue only)')
+    parser.add_argument('-s', '--start-it', type=int, help='Starting iteration (continue only, auto-detected if not specified)')
+    parser.add_argument('-i', '--n-it', type=int, help='Number of iterations to run (overrides convergence criterion)')
+    
+    args = parser.parse_args()
+    
+    from pathlib import Path
+    path = Path(args.input_or_dir)
+    
+    if path.is_dir() and (path / 'training_data').exists():
+        args.mode = 'continue'
+        args.run_dir = args.input_or_dir
+    else:
+        args.mode = 'default'
+        args.input = args.input_or_dir
+    
+    return args
 
 
 def initialize_configuration(args, using_mpi):
     if is_master():
         cfg = load_config_cli(args)
-        metrics_tracker = MetricsTracker(cfg.run_dir)
+        metrics_tracker = MetricsTracker(cfg.run_dir, start_iteration=cfg.start_it)
         append_log = cfg.run_mode != 'default'
-        write_run_log(cfg, args.input, append=append_log)
+        config_name_for_log = args.input if args.mode == 'default' else args.run_dir
+        write_run_log(cfg, config_name_for_log, append=append_log)
         
         print(f"Run: {cfg.run_id}")
         print(f"Results directory: {cfg.run_dir}")

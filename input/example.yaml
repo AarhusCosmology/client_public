@@ -39,7 +39,7 @@ sampling:
   method: emcee # mcmc sampler (currently only supports the emcee affine invariant ensemble sampler)
   emcee:
     n_walkers: 16 # number of walkers to use
-    max_steps: 100000 # maximum number of steps to take
+    max_steps: 10000 # maximum number of steps to take
     burn_in: 500 # number of steps to discard as burn-in
     ess_target: 50 # target effective sample size
     delta_tau_tol: 0.05 # tolerance for delta tau
