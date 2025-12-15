@@ -8,16 +8,16 @@ from datetime import datetime
 SUBDIRECTORIES = ['scalers', 'training_data', 'trained_models', 'training_history', 'training_chains', 'convergence_stats']
 
 def _find_latest_iteration(run_dir):
-    training_data_dir = run_dir / 'training_data'
-    if not training_data_dir.exists():
+    trained_models_dir = run_dir / 'trained_models'
+    if not trained_models_dir.exists():
         return 0
     
-    data_files = list(training_data_dir.glob('data_it_*.h5'))
-    if not data_files:
+    model_files = list(trained_models_dir.glob('trained_model_it_*.keras'))
+    if not model_files:
         return 0
     
     iterations = []
-    for f in data_files:
+    for f in model_files:
         try:
             it_num = int(f.stem.split('_')[-1])
             iterations.append(it_num)
@@ -117,7 +117,7 @@ def load_config_cli(args):
         
         namespace = create_base_namespace(config)
         
-        run_mode = 'mcmc_continue' if args.mcmc else 'continue'
+        run_mode = 'retrain_continue' if args.retrain else 'skip_retrain_continue'
         run_id = run_dir.name
         
         if args.start_it is None:

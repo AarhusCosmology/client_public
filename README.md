@@ -21,7 +21,7 @@ conda activate clienv
 
 or install the dependencies listed in `environment.yaml` in your preferred Python environment.
 
-To automatically activate the conda environment, add to your `.bashrc`:
+To automatically activate the conda environment, add it to your `.bashrc` using:
 
 ```bash
 echo "conda activate clienv" >> ~/.bashrc
@@ -31,7 +31,7 @@ echo "conda activate clienv" >> ~/.bashrc
 
 CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya) (not yet implemented). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
 
-**Performance Note**: CLiENT benefits significantly from GPU acceleration with CUDA support. The neural network training (TensorFlow) and MCMC sampling (emcee) both leverage GPU resources when available, substantially reducing computation time. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
+**Performance Note**: CLiENT benefits significantly from GPU acceleration with CUDA support. The neural network training and MCMC sampling both leverage GPU resources via TensorFlow when available, substantially reducing computation time. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
 
 ## Usage
 
@@ -43,16 +43,10 @@ Start a new run:
 python client.py input/example.yaml -n my_run
 ```
 
-Continue from an existing run:
+Continue from an existing run (skips retraining by default):
 
 ```bash
 python client.py results/my_run_directory
-```
-
-Continue with MCMC-only mode (skip retraining at starting iteration):
-
-```bash
-python client.py results/my_run_directory -m
 ```
 
 ### Command Line Options
@@ -63,7 +57,7 @@ python client.py results/my_run_directory -m
 - `-i`, `--n-it N`: Number of iterations (overrides convergence criterion)
 
 **Continue Mode:**
-- `-m`, `--mcmc`: Skip retraining for the starting iteration
+- `-r`, `--retrain`: Retrain model at the starting iteration (default: skip retraining)
 - `-s`, `--start-it N`: Starting iteration (auto-detected from latest if not specified)
 - `-i`, `--n-it N`: Number of (additional) iterations (overrides convergence criterion)
 
@@ -78,11 +72,11 @@ python benchmarking/benchmark.py results/my_run_directory
 ```
 
 Benchmark options:
-- `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
-- `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
-- `--thin N`: Thinning factor for emcee chains (default: 1)
-- `--params N1 N2 ...`: Parameter indices to include in analysis
-- `--chains DIR`: Path to MontePython chains directory for comparison
+- `-it`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
+- `-n`, `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
+- `-t`, `--thin N`: Thinning factor for chains (default: 1)
+- `-p`, `--params N1 N2 ...`: Parameter indices to include in analysis
+- `-c`, `--chains DIR`: Path to MontePython chains directory for comparison
 - `--no-training-data`: Skip loading training data visualization
 - `--no-training-history`: Skip loading training history
 
@@ -224,6 +218,8 @@ results/YYYYMMDD_HHMMSS_run_name/
 ├── training_chains/          # emcee chains (if save_chains: true)
 ├── convergence_stats/        # R-1 statistics and chain statistics
 ├── benchmark_chains/         # Benchmark MCMC chains (from benchmark.py)
+├── benchmark_figures/        # Triangle plots and visualizations (from benchmark.py)
+├── benchmark_results/        # Diagnostics logs (from benchmark.py)
 ├── metrics.log               # Various metrics for the CLiENT pipeline
 ├── run.log                   # Complete run configuration and timing
 └── example.yaml              # Copy of the input configuration file

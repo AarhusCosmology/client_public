@@ -30,9 +30,9 @@ def parse_arguments():
     parser.add_argument('input_or_dir', help='Input YAML file (new run) or run directory (continue)')
     parser.add_argument('-n', '--name', help='Run name/tag for organization (new runs only)')
     parser.add_argument('-o', '--output', default='results', help='Base directory for results (new runs only)')
-    parser.add_argument('-m', '--mcmc', action='store_true', help='Skip retraining for starting iteration (continue only)')
+    parser.add_argument('-r', '--retrain', action='store_true', help='Retrain model for starting iteration (continue only)')
     parser.add_argument('-s', '--start-it', type=int, help='Starting iteration (continue only, auto-detected if not specified)')
-    parser.add_argument('-i', '--n-it', type=int, help='Number of iterations to run (overrides convergence criterion)')
+    parser.add_argument('-i', '--n-it', type=int, help='Number of new training iterations to produce (overrides convergence criterion)')
     
     args = parser.parse_args()
     
@@ -161,7 +161,9 @@ def load_training_history(cfg, start_it, load_training_data):
 
 
 def should_train_model(iteration_idx, cfg):
-    return iteration_idx > 0 or cfg.run_mode != 'mcmc_continue'
+    if cfg.run_mode == 'skip_retrain_continue':
+        return iteration_idx > 0
+    return True
 
 
 def prepare_training_data(x_all, y_all, x_scaler, y_scaler):
@@ -294,6 +296,8 @@ def main():
     if cfg.n_it is not None:
         max_iterations = cfg.n_it
         use_convergence = False
+        if cfg.run_mode in ['skip_retrain_continue', 'retrain_continue']:
+            max_iterations += 1
     elif cfg.convergence_enabled:
         max_iterations = cfg.max_iterations
         use_convergence = True
@@ -337,55 +341,59 @@ def main():
             metrics_tracker.add_sampling_metrics(iteration=iteration, **sampling_metrics)
         
         converged = False
-        if use_convergence:
-            if is_master():
-                current_chain = sampler.get_chain()
-                
-                from metrics.convergence import compute_and_save_statistics
-                compute_and_save_statistics(cfg, iteration, current_chain)
-                
-                if iteration >= 1:
-                    converged, r_minus_one = check_convergence(cfg, iteration, current_chain=current_chain)
-                    
-                    if r_minus_one is not None:
-                        print_master(f"\nGelman-Rubin R-1: {r_minus_one:.6f} (threshold: {cfg.convergence_threshold})")
-                        metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
-                        
-                        if converged:
-                            print_master(f"\nConvergence achieved at iteration {iteration}!\n")
-                            final_converged = True
-                            iteration_time = time.time() - iteration_start
-                            metrics_tracker.add_iteration_metrics(iteration, iteration_time)
-                            metrics_tracker.save_all_metrics()
-                    else:
-                        print_master("\nR-1 not yet calculable (need at least 2 iterations)\n")
+        if is_master():
+            current_chain = sampler.get_chain()
             
+            from metrics.convergence import compute_and_save_statistics
+            compute_and_save_statistics(cfg, iteration, current_chain)
+            
+            if iteration >= 1:
+                converged, r_minus_one = check_convergence(cfg, iteration, current_chain=current_chain)
+                
+                if r_minus_one is not None:
+                    print_master(f"\nGelman-Rubin R-1: {r_minus_one:.6f} (threshold: {cfg.convergence_threshold})")
+                    metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
+                    
+                    if use_convergence and converged:
+                        print_master(f"\nConvergence achieved at iteration {iteration}!\n")
+                        final_converged = True
+                        iteration_time = time.time() - iteration_start
+                        metrics_tracker.add_iteration_metrics(iteration, iteration_time)
+                        metrics_tracker.save_all_metrics()
+                else:
+                    print_master("\nR-1 not yet calculable (need at least 2 iterations)\n")
+        
+        if use_convergence:
             if using_mpi:
                 converged = get_communicator().bcast(converged, root=0)
             
             if converged:
                 break
         
-        if using_mpi:
-            samples = bcast_array(samples)
-            loglkls = bcast_array(loglkls)
-            if i == 0 and cfg.run_mode == 'default':
-                x_all = bcast_array(x_all)
-                y_all = bcast_array(y_all)
+        is_last_iteration = (i == max_iterations - 1)
         
-        x_new, y_new, resampling_metrics = run_resampling_step(
-            cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples
-        )
+        if not is_last_iteration:
+            if using_mpi:
+                samples = bcast_array(samples)
+                loglkls = bcast_array(loglkls)
+                if i == 0 and cfg.run_mode == 'default':
+                    x_all = bcast_array(x_all)
+                    y_all = bcast_array(y_all)
+            
+            x_new, y_new, resampling_metrics = run_resampling_step(
+                cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples
+            )
+            
+            if is_master():
+                metrics_tracker.add_resampling_metrics(iteration=iteration, **resampling_metrics)
+                save_training_data(x_new, y_new, os.path.join(cfg.training_data_dir, f'data_it_{iteration+1}.h5'))
+            
+            x_all, y_all = update_training_data(x_all, y_all, x_new, y_new, is_master())
         
         if is_master():
-            metrics_tracker.add_resampling_metrics(iteration=iteration, **resampling_metrics)
-            save_training_data(x_new, y_new, os.path.join(cfg.training_data_dir, f'data_it_{iteration+1}.h5'))
-            
             iteration_time = time.time() - iteration_start
             metrics_tracker.add_iteration_metrics(iteration, iteration_time)
             metrics_tracker.save_progress_metrics(iteration)
-        
-        x_all, y_all = update_training_data(x_all, y_all, x_new, y_new, is_master())
     
     barrier()
     
