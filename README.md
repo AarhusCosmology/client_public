@@ -9,7 +9,7 @@
 Clone the repository:
 
 ```bash
-git clone https://github.com/AarhusCosmology/client.git
+git clone https://github.com/AarhusCosmology/client_public.git
 ```
 
 You can either create and activate the provided conda environment:
