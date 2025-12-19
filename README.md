@@ -29,7 +29,7 @@ echo "conda activate clienv" >> ~/.bashrc
 
 ### Prerequisites
 
-CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya) (not yet implemented). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
+CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
 
 **Performance Note**: CLiENT benefits significantly from GPU acceleration with CUDA support. The neural network training and MCMC sampling both leverage GPU resources via TensorFlow when available, substantially reducing computation time. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
 
@@ -40,7 +40,13 @@ CLiENT requires working installations of [CLASS](https://github.com/lesgourg/cla
 Start a new run:
 
 ```bash
-python client.py input/example.yaml -n my_run
+python client.py input/example_cobaya.yaml -n my_run
+```
+
+or with MontePython:
+
+```bash
+python client.py input/example_montepython.yaml -n my_run
 ```
 
 Continue from an existing run (skips retraining by default):
@@ -86,11 +92,18 @@ The benchmark script generates:
 - MAP point comparisons
 - Convergence diagnostics
 
+**Note**: Additional benchmarking and analysis scripts are available in the `benchmarking/` directory for reproducing figures from the accompanying paper.
+
 ### Example Configurations
 
+**Cosmological Likelihoods:**
 - `input/base2018TTTEEE_lensing_bao.yaml` - Base ΛCDM with Planck 2018 TT,TE,EE+lowE+lensing+BAO
 - `input/sterileLCDM_TTTEEE_lensing_bao.yaml` - Sterile neutrino extension (N<sub>s</sub>m<sub>s</sub>ΛCDM)
-- `input/example.yaml` - Quick test configuration
+
+**Test/Example Likelihoods:**
+- `input/example_cobaya.yaml` / `input/example_montepython.yaml` - Simple 2D Gaussian mixture examples
+- `input/gaussian.yaml` - 27D Gaussian with Planck-like covariance (fast testing)
+- `input/banana.yaml` - 29D Banana-shaped likelihood (tests non-Gaussian posteriors)
 
 ## Algorithm Overview
 
@@ -138,12 +151,23 @@ where ε ~ n(1 - 2/9n + k√(2/9n))³ (Wilson-Hilferty transformation) with k co
 All hyperparameters are specified in YAML format. See `input/example.yaml` for a fully documented configuration file. Key sections:
 
 ### Likelihood Configuration
+
+**MontePython:**
 ```yaml
 likelihood:
-  wrapper: montepython                  # 'montepython' or 'cobaya'
-  param: path/to/parameter_file.param   # MontePython .param or Cobaya .yaml
-  conf: path/to/config_file.conf        # MontePython .conf (omit for Cobaya)
-  path: path/to/montepython             # MontePython installation (omit for Cobaya)
+  wrapper: montepython
+  param: input/montepython/example.param  # MontePython .param file
+  conf: config/default.conf               # MontePython .conf file
+  path: resources/montepython_public/montepython
+```
+
+**Cobaya:**
+```yaml
+likelihood:
+  wrapper: cobaya
+  param: input/cobaya/example.yaml  # Cobaya .yaml file
+  conf:                             # Leave empty for Cobaya
+  path:                             # Leave empty for Cobaya
 ```
 
 ### Data Configuration
@@ -178,7 +202,7 @@ training:
   n_epochs: 5000            # Maximum training epochs
   batch_size: 128           # Training batch size
   loss: msre                # 'msre' or TensorFlow loss functions
-  k_sigma: 3                # MSRE transition scale (σ)
+  kappa_sigma: 3            # MSRE transition scale (σ)
   learning_rate: 0.0001     # Adam optimizer learning rate
   val_split: 0.1            # Validation split fraction
   patience: 250             # Early stopping patience (epochs)
