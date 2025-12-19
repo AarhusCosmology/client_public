@@ -1,8 +1,8 @@
 likelihood:
-  wrapper: montepython
-  param: input/montepython/base2018TTTEEE_lensing_bao.param
-  conf: config/default.conf
-  path: resources/montepython_public/montepython
+  wrapper: cobaya
+  param: input/cobaya/banana_planck.yaml
+  conf:
+  path:
 
 data:
   scalers:
@@ -27,8 +27,8 @@ model:
 training:
   n_epochs: 5000
   batch_size: 128
-  loss: msre
-  kappa_sigma: 3
+  loss: msre 
+  kappa_sigma: 3 
   learning_rate: 0.0001
   val_split: 0.1
   patience: 250
@@ -38,7 +38,7 @@ sampling:
   temperature: 7.0
   method: emcee
   emcee:
-    n_walkers: 216
+    n_walkers: 232
     max_steps: 100000
     burn_in: 5000
     ess_target: 50
@@ -49,4 +49,3 @@ sampling:
 convergence:
   r_minus_one_threshold: 0.01
   max_iterations: 20
-    

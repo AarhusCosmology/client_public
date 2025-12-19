@@ -5,6 +5,7 @@ import sys
 import argparse
 import pickle
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,9 +18,30 @@ from scipy import stats
 from config.config_loader import load_config
 from likelihood.surrogate import EmulatedLikelihood
 from likelihood.montepython_wrapper import MontePythonLikelihood
-# from likelihood.cobaya_wrapper import CobayaLikelihood
+from likelihood.cobaya_wrapper import CobayaLikelihood
 from sampling.sampler import run_sampler
 from training.training import load_training_data
+
+textwidth_pts = 440
+width_inches = textwidth_pts / 72.27
+fontsize = 11 / 1.2
+
+matplotlib.rcParams.update({
+    'font.family': 'serif',
+    'font.serif': 'cmr10',
+    'font.size': fontsize,
+    'mathtext.fontset': 'cm',
+    'axes.formatter.use_mathtext': True,
+    'axes.linewidth': 0.8,
+    'xtick.major.width': 0.8,
+    'ytick.major.width': 0.8,
+    'xtick.minor.width': 0.6,
+    'ytick.minor.width': 0.6,
+    'lines.linewidth': 1.5,
+    'patch.linewidth': 0.8,
+    'grid.linewidth': 0.5,
+    'savefig.dpi': 300,
+})
 
 
 class TeeOutput:
@@ -76,6 +98,8 @@ def compute_kl_divergence_kde(samples_p, samples_q, param_indices=None, max_samp
 def load_likelihood_from_config(cfg):
     if cfg.wrapper == 'montepython':
         return MontePythonLikelihood(cfg.param, cfg.conf, 'resources/montepython_public/montepython', silent=True)
+    elif cfg.wrapper == 'cobaya':
+        return CobayaLikelihood(cfg.param, debug=False)
     raise ValueError(f"Unknown likelihood wrapper: {cfg.wrapper}")
 
 
@@ -99,19 +123,77 @@ def load_montepython_chains(chain_dir, param_names, thin=1):
     return samples_list, loglikes_list
 
 
-def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None):
+def load_cobaya_chains(chain_dir, param_names, thin=1):
+    chain_files = sorted(Path(chain_dir).glob('*.txt'))
+    if not chain_files:
+        raise ValueError(f"No chain files found in {chain_dir}")
+    
+    print(f"Loading {len(chain_files)} Cobaya chain files from {chain_dir}")
+    samples_list, loglikes_list, n_params = [], [], len(param_names)
+    
+    for chain_file in chain_files:
+        data = np.loadtxt(chain_file)
+        if data.ndim == 1:
+            data = data.reshape(1, -1)
+        
+        with open(chain_file, 'r') as f:
+            header = f.readline().strip('#').split()
+        
+        mult = data[:, header.index('weight')].astype(int)
+        minuslogpost = data[:, header.index('minuslogpost')]
+        minuslogprior = data[:, header.index('minuslogprior')]
+        
+        loglkl = -(minuslogpost - minuslogprior)
+        
+        param_cols = []
+        for pname in param_names:
+            if pname in header:
+                param_cols.append(header.index(pname))
+            else:
+                raise ValueError(f"Parameter {pname} not found in chain header: {header}")
+        
+        params = data[:, param_cols]
+        
+        chain_samples = np.repeat(params, mult, axis=0)[::thin]
+        chain_loglikes = np.repeat(loglkl, mult)[::thin]
+        samples_list.append(chain_samples)
+        loglikes_list.append(chain_loglikes)
+    
+    print(f"Loaded {sum(len(s) for s in samples_list)} total samples (thinned by {thin})")
+    return samples_list, loglikes_list
+
+
+def detect_chain_format(chain_dir):
+    """Detect whether chains are MontePython or Cobaya format by checking for header."""
+    chain_files = list(Path(chain_dir).glob('*.txt'))
+    if not chain_files:
+        raise ValueError(f"No chain files found in {chain_dir}")
+    
+    with open(chain_files[0], 'r') as f:
+        first_line = f.readline().strip()
+    
+    if first_line.startswith('#'):
+        return 'cobaya'
+    else:
+        return 'montepython'
+
+
+def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='emcee', reference_sampler=None):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Run directory: {run_dir}")
+    print(f"Surrogate sampler: {surrogate_sampler}")
+    if reference_sampler:
+        print(f"Reference sampler: {reference_sampler}")
     print(f"Chain shape: {samples.samples.shape}")
     print(f"Thin factor: {args.thin}")
     print(f"MCMC steps: {args.n_steps}")
-    if mp_samples:
-        print(f"MontePython chains loaded from: {args.chains}")
+    if args.chains:
+        print(f"Reference chains loaded from: {args.chains}")
     print("=" * 70)
     
-    print(f"\n=== Convergence Diagnostics (Surrogate) ===")
+    print(f"\n=== Convergence Diagnostics (Surrogate - {surrogate_sampler}) ===")
     try:
         surrogate_GR = samples.getGelmanRubin()
         print(f"Gelman-Rubin statistic: {surrogate_GR:.4f}")
@@ -131,7 +213,8 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
             print(f"  {pname}: N/A ({e})")
     
     if mp_samples:
-        print(f"\n=== Convergence Diagnostics (MontePython True Chains) ===")
+        ref_label = f"Reference ({reference_sampler})" if reference_sampler else "Reference/True Chains"
+        print(f"\n=== Convergence Diagnostics ({ref_label}) ===")
         try:
             mp_GR = mp_samples.getGelmanRubin()
             print(f"Gelman-Rubin statistic: {mp_GR:.4f}")
@@ -212,16 +295,16 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         except Exception as e:
             print(f"Error computing KL divergence: {e}")
     
-    print(f"\n=== MAP Estimates ===")
+    print(f"\n=== Maximum Log-Likelihood Samples (from MCMC chains) ===")
     surrogate_bestfit = samples.samples[np.argmin(samples.loglikes)]
-    print(f"Surrogate MAP log(posterior): {-min(samples.loglikes):.4f}")
+    print(f"Surrogate ({surrogate_sampler}) maximum of log(likelihood): {-min(samples.loglikes):.4f}")
     
     if mp_samples:
         mp_bestfit = mp_samples.samples[np.argmin(mp_samples.loglikes)]
-        print(f"True (MontePython) MAP log(posterior): {-min(mp_samples.loglikes):.4f}")
+        print(f"Reference ({reference_sampler}) maximum of log(likelihood): {-min(mp_samples.loglikes):.4f}")
         if surrogate is not None:
             surr_at_true_map = surrogate.logpost_array(mp_bestfit.reshape(1, -1))[0]
-            print(f"Surrogate log(posterior) at True MAP: {surr_at_true_map:.4f}")
+            print(f"Surrogate log(likelihood) at reference ({reference_sampler}) best-fit: {surr_at_true_map:.4f}")
         
         print()
         header = f"{'Parameter':<20} {'Surr MAP':>12} {'True MAP':>12} {'Diff':>10} {'Rel (%)':>8}"
@@ -286,7 +369,7 @@ def main():
     parser.add_argument('-n', '--n-steps', type=int, default=None, help='Number of MCMC steps (defaults to max_steps from config)')
     parser.add_argument('-t', '--thin', type=int, default=1, help='Thinning factor for chains')
     parser.add_argument('-p', '--params', nargs='+', default=None, help='Parameter indices to include in analysis')
-    parser.add_argument('-c', '--chains', default=None, help='Path to MontePython chains directory for comparison')
+    parser.add_argument('-c', '--chains', default=None, help='Path to MontePython or Cobaya chains directory for comparison')
     parser.add_argument('--no-training-data', action='store_true', help='Skip loading training data visualization')
     parser.add_argument('--no-training-history', action='store_true', help='Skip loading training history')
     args = parser.parse_args()
@@ -367,6 +450,15 @@ def main():
             chain, log_prob = chain[::args.thin], log_prob[::args.thin]
     
     param_labels = [true_likelihood.param['varying'][p].get('label', p).replace('$', '') for p in param_names]
+    
+    label_overrides = {
+        'deg_ncdm__2': r'N_{\mathrm{eff},s}',
+        'm_ncdm__2': r'm_s'
+    }
+    for i, pname in enumerate(param_names):
+        if pname in label_overrides:
+            param_labels[i] = label_overrides[pname]
+    
     samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])], 
                         names=param_names, labels=param_labels,
                         loglikes=[-log_prob[:, i] for i in range(log_prob.shape[1])], 
@@ -383,31 +475,50 @@ def main():
         plot_params, param_indices = param_names, list(range(len(param_names)))
     
     mp_samples = None
+    chain_format = None
     if args.chains:
         try:
-            mp_samples_list, mp_loglikes_list = load_montepython_chains(args.chains, param_names, thin=1)
+            chain_format = detect_chain_format(args.chains)
+            print(f"Detected {chain_format} chain format")
+            
+            if chain_format == 'cobaya':
+                mp_samples_list, mp_loglikes_list = load_cobaya_chains(args.chains, param_names, thin=1)
+            else:
+                mp_samples_list, mp_loglikes_list = load_montepython_chains(args.chains, param_names, thin=1)
+            
             mp_samples = MCSamples(samples=mp_samples_list, names=param_names, labels=param_labels,
                                   loglikes=[-ll for ll in mp_loglikes_list], ranges=prior_bounds)
-            print(f"Loaded {sum(len(s) for s in mp_samples_list)} MP samples")
+            print(f"Loaded {sum(len(s) for s in mp_samples_list)} samples from {chain_format} chains")
         except Exception as e:
-            print(f"Warning: Could not load MontePython chains: {e}")
+            print(f"Warning: Could not load chains: {e}")
+    
+    surrogate_sampler = cfg.sampling_method if hasattr(cfg, 'sampling_method') else 'emcee'
+    reference_sampler = None
+    if args.chains and chain_format:
+        reference_sampler = chain_format
     
     log_file_path = run_dir / "benchmark_results" / f"{timestamp}_diagnostics_it_{iteration}.log"
     log_file_path.parent.mkdir(exist_ok=True), surrogate
     
     with TeeOutput(str(log_file_path)):
-        print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate)
+        print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate, 
+                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
     
-    g = plots.get_subplot_plotter()
+    g = plots.get_subplot_plotter(width_inch=width_inches)
+    g.settings.axes_fontsize = fontsize
+    g.settings.axes_labelsize = fontsize
+    g.settings.legend_fontsize = fontsize * 0.9
+    g.settings.figure_legend_frame = False
+    
     plot_data = ([mp_samples, samples] if mp_samples else samples)
     plot_args = {"filled": False, "param_limits": {n: prior_bounds[n] for n in plot_params}}
     
     if mp_samples:
-        plot_args.update({"line_args": [{"lw": 2, "color": "grey"}, {"lw": 2, "color": "darkblue"}],
-                         "contour_args": [{"lw": 2, "color": "grey"}, {"lw": 2, "color": "darkblue"}]})
+        plot_args.update({"line_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}],
+                         "contour_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}]})
     else:
-        plot_args.update({"line_args": [{"lw": 2, "color": "darkblue"}],
-                         "contour_args": [{"lw": 2, "color": "darkblue"}]})
+        plot_args.update({"line_args": [{"lw": 2, "color": "C0"}],
+                         "contour_args": [{"lw": 2, "color": "C0"}]})
     
     g.triangle_plot(plot_data, plot_params, **plot_args)
     
@@ -416,15 +527,21 @@ def main():
             for i in range(j):
                 if ax := g.get_axes_for_params(plot_params[i], plot_params[j]):
                     ax.scatter(x_all[:, param_indices[i]], x_all[:, param_indices[j]], 
-                              s=1, alpha=0.2, color='blue', zorder=1, edgecolors='none', rasterized=True)
+                              s=0.3, alpha=0.15, color='black', zorder=1, edgecolors='none', rasterized=True)
     
     [legend.remove() for legend in g.fig.legends]
     
-    legend_elements = ([Line2D([0], [0], color='grey', lw=2, label='True Posterior')] if mp_samples else [])
-    legend_elements.append(Line2D([0], [0], color='darkblue', lw=2, label='Surrogate'))
+    ref_label = f'Reference ({reference_sampler})' if reference_sampler else 'True Posterior'
+    surr_label = f'Surrogate ({surrogate_sampler})'
+    
+    legend_elements = [Line2D([0], [0], color='C0', lw=2, label=surr_label)]
+    if mp_samples:
+        legend_elements.append(Line2D([0], [0], color='C1', lw=2, label=ref_label))
     if x_all is not None:
-        legend_elements.append(Line2D([0], [0], marker='o', color='blue', lw=0, ms=4, alpha=0.7, label='Training Data'))
-    g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98))
+        legend_elements.append(Line2D([0], [0], marker='o', color='black', lw=0, ms=4, alpha=0.7, label='Training Data'))
+    
+    g.fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98), 
+                fontsize=fontsize * 0.9, framealpha=0.9)
     
     figure_dir = run_dir / 'benchmark_figures'
     figure_dir.mkdir(exist_ok=True)
@@ -434,14 +551,17 @@ def main():
     if not args.no_training_history and (history_path := run_dir / f"training_history/history_it_{iteration}.pkl").exists():
         with open(history_path, 'rb') as f:
             history = pickle.load(f)
-        fig, ax = plt.subplots(figsize=(8, 5))
+        
+        fig, ax = plt.subplots(figsize=(width_inches, width_inches * 0.6))
         epochs = range(len(history['loss']))
         ax.plot(epochs, history['loss'], label='Training', color='blue', alpha=0.8)
         ax.plot(epochs, history['val_loss'], label='Validation', color='orange', alpha=0.8)
         ax.set(xlabel='Epoch', ylabel='Loss', title=f'Training History - Iteration {iteration}', yscale='log')
-        ax.grid(alpha=0.3)
+        ax.grid(alpha=0.3, linewidth=0.5)
         ax.legend()
-        fig.tight_layout()
+
+        fig.subplots_adjust(left=0.15, right=0.97, bottom=0.15, top=0.92)
+        
         history_output = figure_dir / f'{timestamp}_training_history_it_{iteration}.pdf'
         fig.savefig(history_output, format='pdf')
         plt.close(fig)

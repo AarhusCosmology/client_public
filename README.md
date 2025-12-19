@@ -101,9 +101,9 @@ The benchmark script generates:
 - `input/sterileLCDM_TTTEEE_lensing_bao.yaml` - Sterile neutrino extension (N<sub>s</sub>m<sub>s</sub>ΛCDM)
 
 **Test/Example Likelihoods:**
-- `input/example_cobaya.yaml` / `input/example_montepython.yaml` - Simple 2D Gaussian mixture examples
-- `input/gaussian.yaml` - 27D Gaussian with Planck-like covariance (fast testing)
-- `input/banana.yaml` - 29D Banana-shaped likelihood (tests non-Gaussian posteriors)
+- `input/example_cobaya.yaml` / `input/example_montepython.yaml` - Simple 2D Gaussian examples
+- `input/gaussian.yaml` - 27D Gaussian with Planck-like covariance
+- `input/banana.yaml` - 29D Banana-shaped likelihood
 
 ## Algorithm Overview
 

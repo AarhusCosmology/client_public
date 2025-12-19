@@ -13,7 +13,7 @@ data:
     strategy: lhs
     n_std: 10.0
   iterative:
-    n_candidates: 1000
+    n_candidates: 5000
     strategy: adaptive
     k_NN: 20
     temperature: 7.0
@@ -28,7 +28,7 @@ training:
   n_epochs: 5000
   batch_size: 128
   loss: msre 
-  k_sigma: 3 
+  kappa_sigma: 3 
   learning_rate: 0.0001
   val_split: 0.1
   patience: 250

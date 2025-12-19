@@ -12,20 +12,22 @@ test2/
 # MontePython Configuration file
 config/default.conf
 
-# Example chains
+# Results
 example_chains/
+montepython_chains/
+gaussian_planck/
+banana_planck/
+comparison_results/
 
 # Logs
 logs/
-
-# Cobaya
-likelihood/cobaya_wrapper.py
 
 # Resources
 resources/
 
 # Results
 results/
+results_old/
 
 # Documentation and job scripts
 mpi_guide.md

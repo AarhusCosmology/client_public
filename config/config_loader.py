@@ -82,7 +82,7 @@ def create_base_namespace(config):
         
         learning_rate=float(training['learning_rate']),
         loss_func=str(training['loss']),
-        k_sigma=float(training['k_sigma']),
+        kappa_sigma=float(training['kappa_sigma']),
         epochs=int(training['n_epochs']),
         batch_size=int(training['batch_size']),
         val_split=float(training['val_split']),

@@ -19,7 +19,7 @@ def load_training_data(path):
 def _get_configured_loss(cfg, y_train, y_scaler, n):
     if cfg.loss_func == 'msre':
         y_max, y_std = float(y_train.max()), float(y_scaler.scale_[0])
-        return get_loss_function(cfg.loss_func, y_max, cfg.k_sigma, n, y_std)
+        return get_loss_function(cfg.loss_func, y_max, cfg.kappa_sigma, n, y_std)
     return get_loss_function(cfg.loss_func)
 
 def _create_early_stopping_callback(cfg):

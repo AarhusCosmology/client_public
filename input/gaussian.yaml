@@ -1,8 +1,8 @@
 likelihood:
-  wrapper: montepython
-  param: input/montepython/base2018TTTEEE_lensing_bao.param
-  conf: config/default.conf
-  path: resources/montepython_public/montepython
+  wrapper: cobaya
+  param: input/cobaya/gaussian_planck.yaml
+  conf:
+  path:
 
 data:
   scalers:

@@ -28,7 +28,7 @@ training:
   n_epochs: 500 # maximum number of epochs to train the network for
   batch_size: 128 # batch size for training
   loss: msre # loss function: accepts standard tensorflow loss functions or the custom 'msre' (Mean Square Relative Error) function
-  k_sigma: 3 # number of standard deviations defining the region where the loss is treated as (near-)absolute error before transitioning to relative error 
+  kappa_sigma: 3 # number of standard deviations defining the region where the loss is treated as (near-)absolute error before transitioning to relative error 
   learning_rate: 0.001 # learning rate for Adam optimizer
   val_split: 0.1 # validation split (0.1 = use randomly 10% of training data for validation)
   patience: 250 # patience in terms of epochs for early stopping (with restore_best_weights = True)

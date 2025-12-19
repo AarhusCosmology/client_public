@@ -1,0 +1,328 @@
+likelihood:
+  banana_planck:
+    external: import_module('likelihood.banana_function').banana_loglkl_planck
+
+params:
+  omega_b:
+    prior:
+      min: 0.005
+      max: 0.1
+    ref:
+      dist: norm
+      loc: 0.02281
+      scale: 0.0001773
+    proposal: 0.0001773
+    latex: '\Omega_b h^2'
+    
+  omega_cdm:
+    prior:
+      min: 0.001
+      max: 0.99
+    ref:
+      dist: norm
+      loc: 0.118
+      scale: 0.0008154
+    proposal: 0.0008154
+    latex: '\Omega_{cdm} h^2'
+    
+  theta_s_100:
+    prior:
+      min: 0.5
+      max: 10
+    ref:
+      dist: norm
+      loc: 1.041
+      scale: 0.0002518
+    proposal: 0.0002518
+    latex: '100\,\theta_\mathrm{s}'
+    
+  ln10_10_A_s:
+    prior:
+      min: 1.61
+      max: 3.91
+    ref:
+      dist: norm
+      loc: 3.009
+      scale: 0.01124
+    proposal: 0.01124
+    latex: '\ln(10^{10}A_s)'
+    
+  n_s:
+    prior:
+      min: 0.8
+      max: 1.2
+    ref:
+      dist: norm
+      loc: 0.9586
+      scale: 0.004295
+    proposal: 0.004295
+    latex: 'n_s'
+    
+  tau_reio:
+    prior:
+      min: 0.01
+      max: 0.8
+    ref:
+      dist: norm
+      loc: 0.05981
+      scale: 0.003923
+    proposal: 0.003923
+    latex: '\tau_\mathrm{reio}'
+    
+  A_cib_217:
+    prior:
+      min: 0.0
+      max: 200.0
+    ref:
+      dist: norm
+      loc: 33.29
+      scale: 8.93
+    proposal: 8.93
+    latex: 'A^\mathrm{CIB}_{217}'
+    
+  xi_sz_cib:
+    prior:
+      min: 0.0
+      max: 1.0
+    ref:
+      dist: norm
+      loc: 0.3325
+      scale: 0.242
+    proposal: 0.242
+    latex: '\xi_{\mathrm{tSZ}\times\mathrm{CIB}}'
+    
+  A_sz:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 5.377
+      scale: 2.097
+    proposal: 2.097
+    latex: 'A_\mathrm{tSZ}'
+    
+  ps_A_100_100:
+    prior:
+      min: 0.0
+      max: 400.0
+    ref:
+      dist: norm
+      loc: 173.8
+      scale: 26.43
+    proposal: 26.43
+    latex: 'A^{\mathrm{PS}}_{100\times100}'
+    
+  ps_A_143_143:
+    prior:
+      min: 0.0
+      max: 400.0
+    ref:
+      dist: norm
+      loc: 57.1
+      scale: 10.07
+    proposal: 10.07
+    latex: 'A^{\mathrm{PS}}_{143\times143}'
+    
+  ps_A_143_217:
+    prior:
+      min: 0.0
+      max: 400.0
+    ref:
+      dist: norm
+      loc: 29.52
+      scale: 5.415
+    proposal: 5.415
+    latex: 'A^{\mathrm{PS}}_{143\times217}'
+    
+  ps_A_217_217:
+    prior:
+      min: 0.0
+      max: 400.0
+    ref:
+      dist: norm
+      loc: 127.1
+      scale: 9.465
+    proposal: 9.465
+    latex: 'A^{\mathrm{PS}}_{217\times217}'
+    
+  ksz_norm:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 4.046
+      scale: 2.234
+    proposal: 2.234
+    latex: 'A_\mathrm{kSZ}'
+    
+  gal545_A_100:
+    prior:
+      min: 0.0
+      max: 50.0
+    ref:
+      dist: norm
+      loc: 5.413
+      scale: 2.238
+    proposal: 2.238
+    latex: 'A^{\mathrm{gal},545}_{100}'
+    
+  gal545_A_143:
+    prior:
+      min: 0.0
+      max: 50.0
+    ref:
+      dist: norm
+      loc: 10.89
+      scale: 1.394
+    proposal: 1.394
+    latex: 'A^{\mathrm{gal},545}_{143}'
+    
+  gal545_A_143_217:
+    prior:
+      min: 0.0
+      max: 100.0
+    ref:
+      dist: norm
+      loc: 24.27
+      scale: 3.168
+    proposal: 3.168
+    latex: 'A^{\mathrm{gal},545}_{143\times217}'
+    
+  gal545_A_217:
+    prior:
+      min: 0.0
+      max: 400.0
+    ref:
+      dist: norm
+      loc: 91.74
+      scale: 6.017
+    proposal: 6.017
+    latex: 'A^{\mathrm{gal},545}_{217}'
+    
+  galf_TE_A_100:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 0.01359
+      scale: 0.03845
+    proposal: 0.03845
+    latex: 'A^{\mathrm{gal},TE}_{100}'
+    
+  galf_TE_A_100_143:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 0.142
+      scale: 0.03303
+    proposal: 0.03303
+    latex: 'A^{\mathrm{gal},TE}_{100\times143}'
+    
+  galf_TE_A_100_217:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 0.5247
+      scale: 0.06606
+    proposal: 0.06606
+    latex: 'A^{\mathrm{gal},TE}_{100\times217}'
+    
+  galf_TE_A_143:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 0.2598
+      scale: 0.06623
+    proposal: 0.06623
+    latex: 'A^{\mathrm{gal},TE}_{143}'
+    
+  galf_TE_A_143_217:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 0.8805
+      scale: 0.09459
+    proposal: 0.09459
+    latex: 'A^{\mathrm{gal},TE}_{143\times217}'
+    
+  galf_TE_A_217:
+    prior:
+      min: 0.0
+      max: 10.0
+    ref:
+      dist: norm
+      loc: 2.113
+      scale: 0.2954
+    proposal: 0.2954
+    latex: 'A^{\mathrm{gal},TE}_{217}'
+    
+  calib_100T:
+    prior:
+      min: 0.0
+      max: 3.0
+    ref:
+      dist: norm
+      loc: 1.001
+      scale: 0.0007192
+    proposal: 0.0007192
+    latex: 'c^{T}_{100}'
+    
+  calib_217T:
+    prior:
+      min: 0.0
+      max: 3.0
+    ref:
+      dist: norm
+      loc: 0.997
+      scale: 0.0005374
+    proposal: 0.0005374
+    latex: 'c^{T}_{217}'
+    
+  A_planck:
+    prior:
+      min: 0.9
+      max: 1.1
+    ref:
+      dist: norm
+      loc: 0.9956
+      scale: 0.002401
+    proposal: 0.002401
+    latex: 'A_\mathrm{Planck}'
+    
+  x_28:
+    prior:
+      min: 0.0
+      max: 5.0
+    ref:
+      dist: norm
+      loc: 2.5
+      scale: 1.0
+    proposal: 1.0
+    latex: 'x_{28}'
+    
+  x_29:
+    prior:
+      min: 0.0
+      max: 5.0
+    ref:
+      dist: norm
+      loc: 2.5
+      scale: 1.0
+    proposal: 1.0
+    latex: 'x_{29}'
+
+sampler:
+  mcmc:
+    max_samples: 1000000
+    Rminus1_stop: 0.01

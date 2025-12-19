@@ -10,7 +10,7 @@ from config.run_manager import write_run_log, append_convergence_info
 from metrics.metrics_tracker import MetricsTracker
 from metrics.convergence import check_convergence
 from likelihood.montepython_wrapper import MontePythonLikelihood
-# from likelihood.cobaya_wrapper import CobayaLikelihood
+from likelihood.cobaya_wrapper import CobayaLikelihood
 from scaling.scaling import make_scalers, save_scalers
 from sampling.initial_sampler import generate_samples
 from utils.mpi_utils import (
@@ -62,7 +62,10 @@ def initialize_configuration(args, using_mpi):
         print(f"Run mode: {cfg.run_mode}")
         
         if cfg.n_it is not None:
-            print(f"Iterations: {cfg.start_it} to {cfg.start_it + cfg.n_it - 1}")
+            end_it = cfg.start_it + cfg.n_it - 1
+            if cfg.run_mode in ['skip_retrain_continue', 'retrain_continue']:
+                end_it += 1
+            print(f"Iterations: {cfg.start_it} to {end_it}")
         else:
             print(f"Running with convergence criterion: R-1 < {cfg.convergence_threshold}")
             print(f"Maximum iterations: {cfg.max_iterations}")
@@ -90,7 +93,6 @@ def initialize_likelihood(cfg):
     elif cfg.wrapper == 'cobaya':
         likelihood = CobayaLikelihood(
             yaml_file=cfg.param,
-            output_folder=os.path.join(cfg.run_dir, 'cobaya'),
             debug=False
         )
     else:
@@ -129,7 +131,7 @@ def evaluate_initial_samples(cfg, likelihood, samples, using_mpi):
     
     if is_master():
         elapsed = time.time() - initial_start
-        print_master(f"⏱️  Initial sampling completed in {elapsed:.2f}s ({elapsed/cfg.n_samples:.2f}s per sample)\n")
+        print_master(f"Initial sampling completed in {elapsed:.2f}s ({elapsed/cfg.n_samples:.2f}s per sample)\n")
         
         outlier_threshold = -1e20
         valid_mask = loglkls > outlier_threshold
@@ -241,7 +243,7 @@ def run_resampling_step(cfg, likelihood, samples, loglkls, x_all, y_all, x_scale
     if is_master():
         elapsed = time.time() - resampling_start
         n_accepted = len(x_new)
-        print_master(f"⏱️  Resampling completed in {elapsed:.2f}s")
+        print_master(f"Resampling completed in {elapsed:.2f}s")
         if n_accepted > 0:
             print_master(f"   Accepted {n_accepted} new samples ({elapsed/n_accepted:.2f}s per accepted sample)\n")
         else:

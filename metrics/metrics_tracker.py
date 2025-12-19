@@ -241,7 +241,7 @@ class MetricsTracker:
                 if parts[0] == 'avg':
                     continue
                 it, epochs, loss, val_loss, time = int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])*60
-                if it < start_iteration:
+                if it <= start_iteration:
                     metrics.append(TrainingMetrics(it, epochs, loss, val_loss, time))
             return metrics
         
