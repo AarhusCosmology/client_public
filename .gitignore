@@ -14,10 +14,13 @@ config/default.conf
 
 # Results
 example_chains/
+example_cobaya/
+example_montepython/
 montepython_chains/
 gaussian_planck/
 banana_planck/
 comparison_results/
+
 
 # Logs
 logs/

@@ -87,8 +87,7 @@ class CobayaLikelihood(BaseLikelihood):
                         lower = prior_info['loc']
                         upper = prior_info['loc'] + prior_info['scale']
                     else:
-                        lower = prior_info['loc'] - 5 * prior_info['scale']
-                        upper = prior_info['loc'] + 5 * prior_info['scale']
+                        lower, upper = None, None
                 else:
                     lower, upper = None, None
             else:
@@ -107,16 +106,18 @@ class CobayaLikelihood(BaseLikelihood):
             else:
                 initial = 0.5 * (lower + upper) if (lower is not None and upper is not None) else 0.0
             
-            if proposal is not None:
-                sigma = float(proposal)
+            if isinstance(prior_info, dict) and 'scale' in prior_info:
+                sigma = prior_info['scale']
             elif ref_info is not None and isinstance(ref_info, dict) and 'scale' in ref_info:
                 sigma = ref_info['scale']
-            elif isinstance(prior_info, dict) and 'scale' in prior_info:
-                sigma = prior_info['scale'] * 0.1
-            elif lower is not None and upper is not None:
-                sigma = (upper - lower) * 0.1
+            elif proposal is not None:
+                sigma = float(proposal)
             else:
-                sigma = 1.0
+                raise ValueError(
+                    f"Parameter {param_name}: Must specify 'prior[scale]', 'ref[scale]', or 'proposal' "
+                    f"to determine sigma for restricted prior bounds (prioritized in that order as most "
+                    f"representative of standard deviation)."
+                )
             
             self.param['varying'][param_name] = {
                 'range': [lower, upper],
