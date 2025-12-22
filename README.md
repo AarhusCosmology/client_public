@@ -1,6 +1,6 @@
 # CLiENT
 
-**CLiENT** (Cosmological Likelihood Emulator using Neural networks with TensorFlow) is a framework for emulating cosmological likelihood functions, bypassing the need for Einstein-Boltzmann solver codes like [CLASS](https://github.com/lesgourg/class_public) and [CAMB](https://github.com/cmbant/CAMB) for evaluation of the likelihood. CLiENT compares to observable emulators like [CONNECT](https://github.com/AarhusCosmology/connect_public), but has the advantage of producing a surrogate likelihood which is completely auto-differentiable. 
+**CLiENT** (Cosmological Likelihood Emulator using Neural networks with TensorFlow) is a framework for emulating cosmological likelihood functions, bypassing the need for Einstein-Boltzmann solver codes like [CLASS](https://github.com/lesgourg/class_public) and [CAMB](https://github.com/cmbant/CAMB) for evaluation of the likelihood. CLiENT compares to observable emulators like [CONNECT](https://github.com/AarhusCosmology/connect_public), but has the advantage of producing a surrogate likelihood which is completely auto-differentiable.
 
 ## Getting Started
 
@@ -263,20 +263,16 @@ MPI parallelizes initial sampling and resampling likelihood evaluations. Trainin
 
 ## Performance
 
-[Add performance information]
+For cosmological likelihoods with ~30 varying parameters, CLiENT typically requires fewer than 2×10⁴ function evaluations to produce credible intervals within better than 0.1σ of those obtained using the true likelihood, while maintaining single-point emulator precision better than Δχ² ~ 0.5 across relevant regions in parameter space.
 
 ## License
 
-[Add license information]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Citation
 
-If you use CLiENT, please cite:
-
-```
-[Add citation when paper is published]
-```
+If you use CLiENT in your publications, please cite [arXiv:2512.17509](https://arxiv.org/abs/2512.17509)
 
 ## Contact
 
-[Add contact information]
+For questions, issues, or contributions, please open an issue or contact me at luca.janken@post.au.dk.
