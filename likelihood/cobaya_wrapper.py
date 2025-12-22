@@ -5,8 +5,6 @@ import tempfile
 import shutil
 from typing import Dict, Optional, Any
 import numpy as np
-import yaml
-from scipy import stats
 
 from .base import BaseLikelihood
 
@@ -226,12 +224,6 @@ class CobayaLikelihood(BaseLikelihood):
             param_name: info['sigma']
             for param_name, info in self.param['varying'].items()
         }
-    
-    def save_config(self):
-        config_path = os.path.join(self.output_folder, 'cobaya_config.yaml')
-        with open(config_path, 'w') as f:
-            yaml.dump(self.cobaya_info, f, default_flow_style=False)
-        print(f"Saved Cobaya configuration to: {config_path}")
     
     def __del__(self):
         if hasattr(self, 'cobaya_model'):

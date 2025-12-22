@@ -9,30 +9,20 @@ SUBDIRECTORIES = ['scalers', 'training_data', 'trained_models', 'training_histor
 
 def _find_latest_iteration(run_dir):
     trained_models_dir = run_dir / 'trained_models'
-    if not trained_models_dir.exists():
-        return 0
-    
-    model_files = list(trained_models_dir.glob('trained_model_it_*.keras'))
-    if not model_files:
-        return 0
-    
     iterations = []
-    for f in model_files:
-        try:
-            it_num = int(f.stem.split('_')[-1])
-            iterations.append(it_num)
-        except ValueError:
-            continue
+    for f in trained_models_dir.glob('trained_model_it_*.keras'):
+        iterations.append(int(f.stem.split('_')[-1]))
     
-    return max(iterations) if iterations else 0
+    if not iterations:
+        raise FileNotFoundError(
+            f"No trained model files found in {trained_models_dir}. "
+            f"Cannot continue from this run directory."
+        )
+    
+    return max(iterations)
 
 def _find_yaml_in_dir(directory):
     yaml_files = list(Path(directory).glob('*.yaml'))
-    yaml_files = [f for f in yaml_files if not f.name.startswith('2025')]
-    if not yaml_files:
-        raise FileNotFoundError(f"No .yaml configuration file found in {directory}")
-    if len(yaml_files) > 1:
-        print(f"Warning: Multiple .yaml files found in {directory}. Using {yaml_files[0].name}")
     return yaml_files[0]
 
 def create_run_directory(run_name=None, base_results_dir='results'):
@@ -55,7 +45,7 @@ def create_base_namespace(config):
     training = config['training']
     sampling = config['sampling']
     emcee = sampling['emcee']
-    convergence = config.get('convergence', {})
+    convergence = config['convergence']
     
     return SimpleNamespace(
         wrapper=str(likelihood['wrapper']),
@@ -100,9 +90,9 @@ def create_base_namespace(config):
         delta_tau_tol=float(emcee['delta_tau_tol']),
         ac_thin=int(emcee['ac_thin']),
         
-        convergence_threshold=float(convergence.get('r_minus_one_threshold', 0.01)),
+        convergence_threshold=float(convergence['r_minus_one_threshold']),
         convergence_n_samples=100000,
-        max_iterations=int(convergence.get('max_iterations', 20)),
+        max_iterations=int(convergence['max_iterations']),
     )
 
 def load_config_cli(args):
