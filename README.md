@@ -2,36 +2,156 @@
 
 **CLiENT** (Cosmological Likelihood Emulator using Neural networks with TensorFlow) is a framework for emulating cosmological likelihood functions, bypassing the need for Einstein-Boltzmann solver codes like [CLASS](https://github.com/lesgourg/class_public) and [CAMB](https://github.com/cmbant/CAMB) for evaluation of the likelihood. CLiENT compares to observable emulators like [CONNECT](https://github.com/AarhusCosmology/connect_public), but has the advantage of producing a surrogate likelihood which is completely auto-differentiable.
 
+## Table of Contents
+
+- [Getting Started](#getting-started)
+  - [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+    - [CLASS Setup](#class-setup)
+    - [Planck Likelihood Setup (for MontePython)](#planck-likelihood-setup-for-montepython)
+    - [MontePython Setup](#montepython-setup)
+    - [Cobaya Setup](#cobaya-setup)
+- [Usage](#usage)
+  - [Running CLiENT](#running-client)
+  - [Command Line Options](#command-line-options)
+  - [Example Configurations](#example-configurations)
+- [Benchmarking](#benchmarking)
+- [Algorithm Overview](#algorithm-overview)
+  - [Key Features](#key-features)
+    - [Loss Function](#loss-function)
+    - [Activation Function](#activation-function)
+    - [Temperature Scheme](#temperature-scheme)
+- [Configuration](#configuration)
+  - [Likelihood Configuration](#likelihood-configuration)
+  - [Data Configuration](#data-configuration)
+  - [Model Architecture](#model-architecture)
+  - [Training Configuration](#training-configuration)
+  - [Sampling Configuration](#sampling-configuration)
+  - [Convergence Configuration](#convergence-configuration)
+- [Output Structure](#output-structure)
+- [Performance](#performance)
+- [License](#license)
+- [Citation](#citation)
+- [Contact](#contact)
+
 ## Getting Started
 
 ### Installation
 
-Clone the repository:
+To use CLiENT, start by cloning the repository:
 
 ```bash
 git clone https://github.com/AarhusCosmology/client_public.git
 ```
 
-You can either create and activate the provided conda environment:
+You can create a conda environment containing all necessary dependencies using:
 
 ```bash
-conda env create -f environment.yaml
+conda env create -f environment.yaml -n clienv
+```
+
+Alternatively, manually install the dependencies listed in `environment.yaml`. To activate the environment, run:
+
+```bash
 conda activate clienv
 ```
-
-or install the dependencies listed in `environment.yaml` in your preferred Python environment.
-
-To automatically activate the conda environment, add it to your `.bashrc` using:
-
-```bash
-echo "conda activate clienv" >> ~/.bashrc
-```
-
+or add this command to your `.bashrc` file to activate it automatically.
 ### Prerequisites
 
-CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya). For Planck likelihood analyses, ensure the Planck likelihood package is properly installed and configured.
+CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya). If using MontePython, you will also need the C-based `clik` code for Planck likelihoods (see setup below). Cobaya can use either the newer Python-native Planck likelihoods or the original `clik`-based Planck 2018 likelihoods, both installed via `cobaya-install`. For performance, the neural network training and MCMC sampling can utilize GPU resources via TensorFlow when available. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
 
-**Performance Note**: CLiENT benefits significantly from GPU acceleration with CUDA support. The neural network training and MCMC sampling both leverage GPU resources via TensorFlow when available, substantially reducing computation time. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
+#### CLASS Setup
+
+Install the CLASS Boltzmann code in your chosen directory:
+
+```bash
+git clone https://github.com/lesgourg/class_public.git
+```
+
+Build CLASS from the `class_public` directory:
+
+```bash
+make clean
+make
+```
+
+Install the Python wrapper from the `class_public/python` directory:
+
+```bash
+python setup.py build
+python setup.py install --user  # Use --user unless in a virtual/conda environment
+```
+
+#### Planck Likelihood Setup (for MontePython)
+
+Install the Planck likelihood package in your chosen directory:
+
+```bash
+wget -O COM_Likelihood_Code-v3.0_R3.01.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.01.tar.gz"
+wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
+tar -xvzf COM_Likelihood_Code-v3.0_R3.01.tar.gz
+tar -xvzf COM_Likelihood_Data-baseline_R3.00.tar.gz
+rm COM_Likelihood_*tar.gz
+```
+
+From the `code/plc_3.0/plc-3.01` directory, configure and install:
+
+```bash
+./waf configure --install_all_deps
+./waf install
+```
+
+If `./waf configure --install_all_deps` fails, ensure you have working C and Fortran compilers as well as the BLAS/LAPACK and CFITSIO libraries installed. For more details, including building with Intel MKL, see the [clik documentation](https://github.com/benabed/clik). To source the clik profile, run (replace with your actual installation path):
+
+```bash
+source /absolute/path/to/plc-3.01/bin/clik_profile.sh
+```
+or add this command to your `.bashrc` file to source it automatically.
+
+#### MontePython Setup
+
+Install MontePython in your chosen directory:
+
+```bash
+git clone https://github.com/brinckmann/montepython_public.git
+```
+
+Copy the default configuration template to the CLiENT config directory (or another location of your choice):
+
+```bash
+cp /path/to/montepython_public/default.conf.template /path/to/client_public/config/default.conf
+```
+
+Edit `config/default.conf` to point to your actual installation paths:
+
+```python
+path['cosmo']    = '/absolute/path/to/class_public'
+path['clik']     = '/absolute/path/to/plc-3.01/'
+```
+
+Replace with the absolute paths to your installations. The `clik` path is only needed if using Planck likelihoods.
+
+#### Cobaya Setup
+
+Install Cobaya via pip:
+
+```bash
+pip install cobaya
+```
+
+To install likelihoods, you can either install individual likelihoods directly by name:
+
+```bash
+cobaya-install planck_2018_highl_plik.TTTEEE
+```
+
+or install all likelihoods referenced in your Cobaya input file:
+
+```bash
+cobaya-install your_cobaya_input.yaml
+```
+
+Use `--packages-path` to specify where likelihood codes and data will be installed, and add `--skip-global` to skip reinstalling packages already available globally (like CLASS). For more details, see the [Cobaya installation documentation](https://cobaya.readthedocs.io/en/latest/installation_cosmo.html).
 
 ## Usage
 
@@ -55,6 +175,14 @@ Continue from an existing run (skips retraining by default):
 python client.py results/my_run_directory
 ```
 
+For parallel likelihood evaluation with MPI (requires OpenMPI and mpi4py):
+
+```bash
+mpirun -n <N_processes> python client.py <input_yaml|run_directory>
+```
+
+MPI parallelizes initial sampling and resampling likelihood evaluations. Training and MCMC remain serial (leveraging TensorFlow/emcee internal parallelism).
+
 ### Command Line Options
 
 **New Run Mode:**
@@ -69,31 +197,6 @@ python client.py results/my_run_directory
 
 CLiENT automatically detects the mode based on whether the path is a directory (continue) or file (new run).
 
-### Benchmarking
-
-Compare surrogate likelihood against true MontePython chains:
-
-```bash
-python benchmarking/benchmark.py results/my_run_directory
-```
-
-Benchmark options:
-- `-it`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
-- `-n`, `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
-- `-t`, `--thin N`: Thinning factor for chains (default: 1)
-- `-p`, `--params N1 N2 ...`: Parameter indices to include in analysis
-- `-c`, `--chains DIR`: Path to MontePython chains directory for comparison
-- `--no-training-data`: Skip loading training data visualization
-- `--no-training-history`: Skip loading training history
-
-The benchmark script generates:
-- Triangle plots comparing posteriors
-- KL divergence metrics between distributions
-- MAP point comparisons
-- Convergence diagnostics
-
-**Note**: Additional benchmarking and analysis scripts are available in the `benchmarking/` directory for reproducing figures from the accompanying paper.
-
 ### Example Configurations
 
 **Cosmological Likelihoods:**
@@ -104,6 +207,31 @@ The benchmark script generates:
 - `input/example_cobaya.yaml` / `input/example_montepython.yaml` - Simple 2D Gaussian examples
 - `input/gaussian.yaml` - 27D Gaussian with Planck-like covariance
 - `input/banana.yaml` - 29D Banana-shaped likelihood
+
+## Benchmarking
+
+Compare surrogate likelihood against reference chains:
+
+```bash
+python benchmarking/benchmark.py results/my_run_directory
+```
+
+Benchmark options:
+- `-it`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
+- `-n`, `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
+- `-t`, `--thin N`: Thinning factor for chains (default: 1)
+- `-p`, `--params N1 N2 ...`: Parameter indices to include in analysis
+- `-c`, `--chains DIR`: Path to MontePython or Cobaya chains directory for comparison
+- `--no-training-data`: Skip loading training data visualization
+- `--no-training-history`: Skip loading training history
+
+The benchmark script generates:
+- Triangle plots comparing posteriors
+- KL divergence metrics between distributions
+- MAP point comparisons
+- Convergence diagnostics
+
+Additional benchmarking and analysis scripts are available in the `benchmarking/` directory for reproducing figures from the accompanying paper.
 
 ## Algorithm Overview
 
@@ -132,7 +260,9 @@ CLiENT implements a temperature-based iterative training scheme:
 
 ### Key Features
 
-**Loss Function**: The MSRE loss transitions from absolute to relative error based on distance from best-fit:
+#### Loss Function
+
+The MSRE loss transitions from absolute to relative error based on distance from best-fit:
 
 ```
 loss ∝ [(χ²_surrogate - χ²_exact) / (χ²_exact + ε)]²
@@ -140,15 +270,26 @@ loss ∝ [(χ²_surrogate - χ²_exact) / (χ²_exact + ε)]²
 
 where ε ~ n(1 - 2/9n + k√(2/9n))³ (Wilson-Hilferty transformation) with k controlling the transition scale.
 
-**Activation Function**: The Alsing activation function (which is also utilized in CONNECT) replaces ReLu (which lacks expressivity at negative values) by with a linear function at negative values and is characterised by two hyperparameters: The slope of the linear function at negative values and the broadness of the transition region between the asymptotic functions at negative and positive values.
+#### Activation Function
 
-**Temperature Scheme**: 
+The Alsing activation function (which is also utilized in CONNECT) replaces ReLU (which lacks expressivity at negative values) with a linear function at negative values:
+
+```
+f(x) = [γ + (1 + e^(-βx))^(-1) (1 - γ)] x
+```
+
+where β controls the broadness of the transition region and γ controls the asymptotic slope at negative values. Both hyperparameters are trainable for each node in each layer.
+
+#### Temperature Scheme
+
 - T<sub>T</sub> → 1: samples proportional to evidence integral
 - T<sub>T</sub> → ∞: uniform sampling across parameter space
 
 ## Configuration
 
-All hyperparameters are specified in YAML format. See `input/example.yaml` for a fully documented configuration file. Key sections:
+All hyperparameters are specified in YAML format. See `input/example_cobaya.yaml` or `input/example_montepython.yaml` for documented configuration examples.
+
+### Key Configuration Sections
 
 ### Likelihood Configuration
 
@@ -249,17 +390,7 @@ results/YYYYMMDD_HHMMSS_run_name/
 └── example.yaml              # Copy of the input configuration file
 ```
 
-**Note on Continue Mode**: When continuing from an existing run, the original YAML configuration is preserved.
-
-## MPI Support
-
-Parallel likelihood evaluation with MPI:
-
-```bash
-mpirun -n <N_processes> python client.py input/example.yaml
-```
-
-MPI parallelizes initial sampling and resampling likelihood evaluations. Training and MCMC remain serial (leveraging TensorFlow/emcee internal parallelism).
+When continuing from an existing run, the original YAML configuration is preserved.
 
 ## Performance
 

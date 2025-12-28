@@ -139,20 +139,12 @@ class CobayaLikelihood(BaseLikelihood):
             print(f"  {name}: range={info['range']}, initial={info['initial']:.6f}")
     
     def _loglkl(self, position: Dict[str, float]) -> float:
-        result = self.cobaya_model.loglikes(position)
-        if not result or result[0] is None:
+        loglike = self.cobaya_model.loglike(position, return_derived=False)
+        
+        if loglike is None or not np.isfinite(loglike):
             return -np.inf
         
-        loglikes = result[0]
-        
-        if isinstance(loglikes, dict):
-            total_loglike = np.sum([v for v in loglikes.values() if v is not None])
-        elif isinstance(loglikes, (np.ndarray, list)):
-            total_loglike = np.sum(loglikes)
-        else:
-            total_loglike = float(loglikes)
-        
-        return total_loglike
+        return float(loglike)
     
     def logprior(self, position: Dict[str, float]) -> float:
         logprior = self.cobaya_model.logprior(position)
