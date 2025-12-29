@@ -1,19 +1,45 @@
 # utils/mpi_utils.py
 
 import numpy as np
+import os
+
+_MPI_AVAILABLE = None
+_MPI_MODULE = None
+
+def _detect_mpi_environment():
+    mpi_env_vars = [
+        'OMPI_COMM_WORLD_SIZE',
+        'PMI_SIZE',
+        'SLURM_NTASKS',
+        'MPI_LOCALNRANKS',
+    ]
+    return any(os.environ.get(var) for var in mpi_env_vars)
+
+def _check_mpi():
+    global _MPI_AVAILABLE, _MPI_MODULE
+    if _MPI_AVAILABLE is None:
+        try:
+            from mpi4py import MPI
+            _MPI_MODULE = MPI
+            _MPI_AVAILABLE = MPI.COMM_WORLD.Get_size() > 1
+        except (ImportError, Exception) as e:
+            if _detect_mpi_environment():
+                raise RuntimeError(
+                    "MPI environment detected (running under mpirun/mpiexec) but mpi4py is not available.\n"
+                    "Install it with: pip install mpi4py\n"
+                    f"Original error: {e}"
+                )
+            _MPI_AVAILABLE = False
+            _MPI_MODULE = None
+    return _MPI_AVAILABLE
 
 def is_mpi_available():
-    try:
-        from mpi4py import MPI
-        return MPI.COMM_WORLD.Get_size() > 1
-    except ImportError:
-        return False
+    return _check_mpi()
 
 def get_communicator():
-    if not is_mpi_available():
+    if not _check_mpi():
         return None
-    from mpi4py import MPI
-    return MPI.COMM_WORLD
+    return _MPI_MODULE.COMM_WORLD
 
 def get_rank():
     comm = get_communicator()

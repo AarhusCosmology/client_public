@@ -5,8 +5,6 @@ import tempfile
 import shutil
 from typing import Dict, Optional, Any
 import numpy as np
-import yaml
-from scipy import stats
 
 from .base import BaseLikelihood
 
@@ -87,8 +85,7 @@ class CobayaLikelihood(BaseLikelihood):
                         lower = prior_info['loc']
                         upper = prior_info['loc'] + prior_info['scale']
                     else:
-                        lower = prior_info['loc'] - 5 * prior_info['scale']
-                        upper = prior_info['loc'] + 5 * prior_info['scale']
+                        lower, upper = None, None
                 else:
                     lower, upper = None, None
             else:
@@ -107,16 +104,18 @@ class CobayaLikelihood(BaseLikelihood):
             else:
                 initial = 0.5 * (lower + upper) if (lower is not None and upper is not None) else 0.0
             
-            if proposal is not None:
-                sigma = float(proposal)
+            if isinstance(prior_info, dict) and 'scale' in prior_info:
+                sigma = prior_info['scale']
             elif ref_info is not None and isinstance(ref_info, dict) and 'scale' in ref_info:
                 sigma = ref_info['scale']
-            elif isinstance(prior_info, dict) and 'scale' in prior_info:
-                sigma = prior_info['scale'] * 0.1
-            elif lower is not None and upper is not None:
-                sigma = (upper - lower) * 0.1
+            elif proposal is not None:
+                sigma = float(proposal)
             else:
-                sigma = 1.0
+                raise ValueError(
+                    f"Parameter {param_name}: Must specify 'prior[scale]', 'ref[scale]', or 'proposal' "
+                    f"to determine sigma for restricted prior bounds (prioritized in that order as most "
+                    f"representative of standard deviation)."
+                )
             
             self.param['varying'][param_name] = {
                 'range': [lower, upper],
@@ -140,20 +139,12 @@ class CobayaLikelihood(BaseLikelihood):
             print(f"  {name}: range={info['range']}, initial={info['initial']:.6f}")
     
     def _loglkl(self, position: Dict[str, float]) -> float:
-        result = self.cobaya_model.loglikes(position)
-        if not result or result[0] is None:
+        loglike = self.cobaya_model.loglike(position, return_derived=False)
+        
+        if loglike is None or not np.isfinite(loglike):
             return -np.inf
         
-        loglikes = result[0]
-        
-        if isinstance(loglikes, dict):
-            total_loglike = np.sum([v for v in loglikes.values() if v is not None])
-        elif isinstance(loglikes, (np.ndarray, list)):
-            total_loglike = np.sum(loglikes)
-        else:
-            total_loglike = float(loglikes)
-        
-        return total_loglike
+        return float(loglike)
     
     def logprior(self, position: Dict[str, float]) -> float:
         logprior = self.cobaya_model.logprior(position)
@@ -225,12 +216,6 @@ class CobayaLikelihood(BaseLikelihood):
             param_name: info['sigma']
             for param_name, info in self.param['varying'].items()
         }
-    
-    def save_config(self):
-        config_path = os.path.join(self.output_folder, 'cobaya_config.yaml')
-        with open(config_path, 'w') as f:
-            yaml.dump(self.cobaya_info, f, default_flow_style=False)
-        print(f"Saved Cobaya configuration to: {config_path}")
     
     def __del__(self):
         if hasattr(self, 'cobaya_model'):
