@@ -4,6 +4,7 @@ import pickle
 import numpy as np
 import tensorflow as tf
 from typing import Dict, Any
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from model.activations import CustomTanh, Alsing
 from .base import BaseLikelihood
@@ -33,11 +34,28 @@ class EmulatedLikelihood(BaseLikelihood):
             x_scaler = pickle.load(f)
         with open(y_scaler_path, 'rb') as f:
             y_scaler = pickle.load(f)
-        
-        self.x_mean = tf.constant(x_scaler.mean_, dtype=tf.float32)
-        self.x_scale = tf.constant(x_scaler.scale_, dtype=tf.float32)
-        self.y_mean = tf.constant(y_scaler.mean_, dtype=tf.float32)
-        self.y_scale = tf.constant(y_scaler.scale_, dtype=tf.float32)
+
+        if isinstance(x_scaler, StandardScaler):
+            self.x_transform = 'standard'
+            self.x_offset = tf.constant(x_scaler.mean_, dtype=tf.float32)
+            self.x_scale = tf.constant(x_scaler.scale_, dtype=tf.float32)
+        elif isinstance(x_scaler, MinMaxScaler):
+            self.x_transform = 'minmax'
+            self.x_offset = tf.constant(x_scaler.min_, dtype=tf.float32)
+            self.x_scale = tf.constant(x_scaler.scale_, dtype=tf.float32)
+        else:
+            raise TypeError(f"Unsupported x scaler type: {type(x_scaler)}")
+
+        if isinstance(y_scaler, StandardScaler):
+            self.y_transform = 'standard'
+            self.y_offset = tf.constant(y_scaler.mean_, dtype=tf.float32)
+            self.y_scale = tf.constant(y_scaler.scale_, dtype=tf.float32)
+        elif isinstance(y_scaler, MinMaxScaler):
+            self.y_transform = 'minmax'
+            self.y_offset = tf.constant(y_scaler.min_, dtype=tf.float32)
+            self.y_scale = tf.constant(y_scaler.scale_, dtype=tf.float32)
+        else:
+            raise TypeError(f"Unsupported y scaler type: {type(y_scaler)}")
     
     def _copy_parameters_from_true_likelihood(self):
         self.param = {
@@ -48,9 +66,15 @@ class EmulatedLikelihood(BaseLikelihood):
 
     @tf.function(input_signature=[tf.TensorSpec(shape=[None, None], dtype=tf.float32)], jit_compile=True)
     def _predict_graph(self, x):
-        x_scaled = (x - self.x_mean) / self.x_scale
+        if self.x_transform == 'standard':
+            x_scaled = (x - self.x_offset) / self.x_scale
+        else:
+            x_scaled = x * self.x_scale + self.x_offset
+
         y_scaled = self.model(x_scaled, training=False)
-        return y_scaled * self.y_scale + self.y_mean
+        if self.y_transform == 'standard':
+            return y_scaled * self.y_scale + self.y_offset
+        return (y_scaled - self.y_offset) / self.y_scale
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         x = np.atleast_2d(x).astype(np.float32)
@@ -133,4 +157,3 @@ class EmulatedLikelihood(BaseLikelihood):
     def grad_loglkl(self, x: np.ndarray) -> np.ndarray:
         x = np.atleast_2d(x).astype(np.float32)
         return self._grad_loglkl_graph(tf.constant(x)).numpy()
-

@@ -97,7 +97,7 @@ def compute_kl_divergence_kde(samples_p, samples_q, param_indices=None, max_samp
 
 def load_likelihood_from_config(cfg):
     if cfg.wrapper == 'montepython':
-        return MontePythonLikelihood(cfg.param, cfg.conf, 'resources/montepython_public/montepython', silent=True)
+        return MontePythonLikelihood(cfg.param, cfg.conf, cfg.path, silent=True)
     elif cfg.wrapper == 'cobaya':
         return CobayaLikelihood(cfg.param, debug=False)
     raise ValueError(f"Unknown likelihood wrapper: {cfg.wrapper}")

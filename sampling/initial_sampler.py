@@ -18,10 +18,17 @@ def generate_lhc_samples(prior_bounds, n_samples):
     unit_samples = sampler.random(n=n_samples)
     return _scale_unit_samples_to_bounds(unit_samples, prior_bounds)
 
+def generate_random_samples(prior_bounds, n_samples):
+    n_params = len(prior_bounds)
+    unit_samples = np.random.rand(n_samples, n_params)
+    return _scale_unit_samples_to_bounds(unit_samples, prior_bounds)
+
 def generate_samples(likelihood, n_samples, strategy='lhs'):
     prior_bounds = likelihood.get_prior_bounds()
     
     if strategy == 'lhs':
         return generate_lhc_samples(prior_bounds, n_samples)
+    elif strategy == 'random':
+        return generate_random_samples(prior_bounds, n_samples)
     raise ValueError(f"Unknown sampling strategy: {strategy}")
         

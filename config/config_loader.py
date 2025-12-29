@@ -46,12 +46,15 @@ def create_base_namespace(config):
     sampling = config['sampling']
     emcee = sampling['emcee']
     convergence = config['convergence']
+
+    conf_path = likelihood.get('conf') or ''
+    montepython_path = likelihood.get('path') or ''
     
     return SimpleNamespace(
         wrapper=str(likelihood['wrapper']),
         param=str(likelihood['param']),
-        conf=str(likelihood['conf']),
-        path=str(likelihood['path']),
+        conf=str(conf_path),
+        path=str(montepython_path),
         
         x_scaler_type=str(data['scalers']['parameters']),
         y_scaler_type=str(data['scalers']['targets']),
