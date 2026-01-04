@@ -44,7 +44,17 @@ To use CLiENT, start by cloning the repository:
 git clone https://github.com/AarhusCosmology/client_public.git
 ```
 
-You can create a conda environment containing all necessary dependencies using:
+Then, from within the repository, run the interactive setup script:
+
+```bash
+./setup.sh
+```
+
+The setup script will guide you through creating a conda environment and installing all dependencies including CLASS, MontePython/Cobaya, the Planck likelihood, and MPI support.
+
+### Prerequisites
+
+Alternatively, you can manually set up CLiENT by creating a conda environment containing all necessary dependencies using:
 
 ```bash
 conda env create -f environment.yaml -n clienv
@@ -56,7 +66,6 @@ Alternatively, manually install the dependencies listed in `environment.yaml`. T
 conda activate clienv
 ```
 or add this command to your `.bashrc` file to activate it automatically.
-### Prerequisites
 
 CLiENT requires working installations of [CLASS](https://github.com/lesgourg/class_public) and either [MontePython](https://github.com/brinckmann/montepython_public) or [Cobaya](https://github.com/CobayaSampler/cobaya). If using MontePython, you will also need the C-based `clik` code for Planck likelihoods (see setup below). Cobaya can use either the newer Python-native Planck likelihoods or the original `clik`-based Planck 2018 likelihoods, both installed via `cobaya-install`. For performance, the neural network training and MCMC sampling can utilize GPU resources via TensorFlow when available. The environment includes `tensorflow[and-cuda]` for automatic GPU detection and utilization.
 
