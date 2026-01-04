@@ -37,7 +37,6 @@ mpi_guide.md
 example_jobscript.sh
 example_jobscript_mpi.sh
 example_jobscript_gpu_mpi.sh
-*.sh
 
 # Python cache
 __pycache__/
