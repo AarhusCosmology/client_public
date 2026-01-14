@@ -50,7 +50,7 @@ Then, from within the repository, run the interactive setup script:
 ./setup.sh
 ```
 
-The setup script will guide you through creating a conda environment and installing all dependencies including CLASS, MontePython/Cobaya, the Planck likelihood, and MPI support.
+The setup script will guide you through creating a conda environment (~6 GB) and installing all dependencies including CLASS (~1 GB), MontePython (~1 GB) or Cobaya (~5 MB), and the Planck likelihood (~200 MB). The complete installation requires approximately ~8 GB of disk space.
 
 ### Prerequisites
 
