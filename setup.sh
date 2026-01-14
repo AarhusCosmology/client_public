@@ -144,7 +144,7 @@ mkdir -p "${RESOURCES_DIR}"
 # ========================================
 # 1. Conda Environment Setup
 # ========================================
-print_section "Step 1: Conda Environment"
+print_section "Step 1: Conda Environment (~6 GB)"
 
 if ! check_conda; then
     exit 1
@@ -188,7 +188,7 @@ fi
 # ========================================
 # 2. CLASS Setup
 # ========================================
-print_section "Step 2: CLASS Boltzmann Solver"
+print_section "Step 2: CLASS (~1 GB)"
 
 CLASS_PATH=""
 CLASS_INSTALLED=false
@@ -222,7 +222,7 @@ fi
 # ========================================
 # 3. MontePython Setup
 # ========================================
-print_section "Step 3: MontePython (Optional)"
+print_section "Step 3: MontePython (~1 GB, Optional)"
 
 MONTEPYTHON_PATH=""
 
@@ -244,7 +244,7 @@ fi
 # ========================================
 # 4. Planck Likelihood Setup (for MontePython)
 # ========================================
-print_section "Step 4: Planck Likelihood (for MontePython)"
+print_section "Step 4: Planck Likelihood (~200 MB, for MontePython)"
 
 CLIK_PATH=""
 
@@ -261,39 +261,40 @@ if [ -n "$MONTEPYTHON_PATH" ]; then
         [ -n "$DETECTED_CLIK_PARENT" ] && print_info "Detected Planck likelihood in PATH"
     fi
     
-    if prompt_yes_no "Do you want to use Planck likelihood?" "y"; then
-        prompt_with_default "Enter directory where Planck likelihood is/will be installed" "$DETECTED_CLIK_PARENT" CLIK_INSTALL_DIR
-        CLIK_PATH="${CLIK_INSTALL_DIR}/code/plc_3.0/plc-3.01"
+    prompt_with_default "Enter directory where Planck likelihood is/will be installed" "$DETECTED_CLIK_PARENT" CLIK_INSTALL_DIR
+    CLIK_PATH="${CLIK_INSTALL_DIR}/code/plc_3.0/plc-3.01"
+    
+    if [ -d "$CLIK_PATH" ] && [ -f "$CLIK_PATH/bin/clik_profile.sh" ]; then
+        print_success "Using existing Planck likelihood at: ${CLIK_PATH}"
+    elif prompt_yes_no "Download and install Planck likelihood?" "y"; then
+        print_info "Downloading and building Planck likelihood..."
+        mkdir -p "$CLIK_INSTALL_DIR" && cd "$CLIK_INSTALL_DIR"
         
-        if [ -d "$CLIK_PATH" ] && [ -f "$CLIK_PATH/bin/clik_profile.sh" ]; then
-            print_success "Using existing Planck likelihood at: ${CLIK_PATH}"
-        elif prompt_yes_no "Download and install Planck likelihood (~7GB)?" "y"; then
-            print_info "Downloading and building Planck likelihood..."
-            mkdir -p "$CLIK_INSTALL_DIR" && cd "$CLIK_INSTALL_DIR"
-            
-            [ ! -f "COM_Likelihood_Code-v3.0_R3.01.tar.gz" ] && \
-                wget -O COM_Likelihood_Code-v3.0_R3.01.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.01.tar.gz"
-            [ ! -f "COM_Likelihood_Data-baseline_R3.00.tar.gz" ] && \
-                wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
-            
-            tar -xzf COM_Likelihood_Code-v3.0_R3.01.tar.gz && tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
-            rm COM_Likelihood_Code-v3.0_R3.01.tar.gz COM_Likelihood_Data-baseline_R3.00.tar.gz
-            
-            cd code/plc_3.0/plc-3.01
-            ./waf configure --install_all_deps && ./waf install
+        [ ! -f "COM_Likelihood_Code-v3.0_R3.01.tar.gz" ] && \
+            wget -O COM_Likelihood_Code-v3.0_R3.01.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.01.tar.gz"
+        [ ! -f "COM_Likelihood_Data-baseline_R3.00.tar.gz" ] && \
+            wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
+        
+        tar -xzf COM_Likelihood_Code-v3.0_R3.01.tar.gz && tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
+        rm COM_Likelihood_Code-v3.0_R3.01.tar.gz COM_Likelihood_Data-baseline_R3.00.tar.gz
+        
+        cd code/plc_3.0/plc-3.01
+        if ./waf configure --install_all_deps && ./waf install; then
             CLIK_PATH="$(pwd)"
             cd "$SCRIPT_DIR"
             print_success "Planck likelihood installed successfully!"
         else
+            cd "$SCRIPT_DIR"
+            print_error "Planck likelihood installation failed!"
             CLIK_PATH=""
         fi
-        
-        if [ -n "$CLIK_PATH" ] && [ -f "${CLIK_PATH}/bin/clik_profile.sh" ] && \
-           prompt_yes_no "Add clik profile sourcing to your .bashrc?" "n"; then
-            add_to_bashrc "source ${CLIK_PATH}/bin/clik_profile.sh" "Source Planck likelihood (clik) profile"
-        fi
     else
-        print_info "Skipping Planck likelihood setup."
+        CLIK_PATH=""
+    fi
+    
+    if [ -n "$CLIK_PATH" ] && [ -f "${CLIK_PATH}/bin/clik_profile.sh" ] && \
+       prompt_yes_no "Add clik profile sourcing to your .bashrc?" "n"; then
+        add_to_bashrc "source ${CLIK_PATH}/bin/clik_profile.sh" "Source Planck likelihood (clik) profile"
     fi
 else
     print_info "Skipping Planck likelihood (MontePython not configured)."
@@ -302,7 +303,7 @@ fi
 # ========================================
 # 5. Cobaya Setup
 # ========================================
-print_section "Step 5: Cobaya (Optional)"
+print_section "Step 5: Cobaya (~5 MB, Optional)"
 
 COBAYA_INSTALLED=false
 
@@ -339,9 +340,12 @@ else
             pip install mpi4py && print_success "mpi4py installed!" && MPI_INSTALLED=true
         fi
     else
-        print_warning "No MPI runtime detected. Install with: conda install openmpi"
-        if prompt_yes_no "Try installing mpi4py anyway?" "n"; then
-            pip install mpi4py && print_success "mpi4py installed!" && MPI_INSTALLED=true
+        print_warning "No MPI runtime detected."
+        if prompt_yes_no "Install OpenMPI?" "y"; then
+            conda install -y -c conda-forge openmpi && print_success "OpenMPI installed!"
+            if prompt_yes_no "Install mpi4py?" "y"; then
+                pip install mpi4py && print_success "mpi4py installed!" && MPI_INSTALLED=true
+            fi
         fi
     fi
 fi
