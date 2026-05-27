@@ -139,16 +139,12 @@ class CobayaLikelihood(BaseLikelihood):
             print(f"  {name}: range={info['range']}, initial={info['initial']:.6f}")
     
     def _loglkl(self, position: Dict[str, float]) -> float:
-        loglike = self.cobaya_model.loglike(position, return_derived=False)
-        
-        if loglike is None or not np.isfinite(loglike):
-            return -np.inf
-        
-        return float(loglike)
-    
+        result = self.cobaya_model.logposterior(position)
+        logpost = result.logpost
+        return float(logpost) if logpost is not None else -np.inf
+
     def logprior(self, position: Dict[str, float]) -> float:
-        logprior = self.cobaya_model.logprior(position)
-        return logprior
+        return self.log_uniform_prior(position)
     
     def get_parameter_info(self) -> Dict[str, Any]:
         return {
