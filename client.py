@@ -11,7 +11,7 @@ from config.config_loader import load_config_cli
 from config.run_manager import write_run_log, append_convergence_info
 from likelihood.base import build_likelihood
 from likelihood.surrogate import SurrogateLikelihood
-from metrics.convergence import check_convergence
+from metrics.convergence import check_convergence, build_convergence_metric
 from metrics.metrics_tracker import MetricsTracker
 from model.network import build_model, load_model
 from sampling.initial_sampler import generate_samples
@@ -150,6 +150,7 @@ def main():
         use_convergence = cfg.convergence_enabled
 
     surrogate = sampler = None
+    metric = build_convergence_metric(cfg.convergence_metric)
     final_iteration = start_it
     final_converged = False
 
@@ -267,11 +268,10 @@ def main():
         # -- Convergence check --
         converged = False
         if is_master():
-            converged, r_minus_one, r_minus_one_old = check_convergence(cfg, iteration, full_chain)
+            converged, r_minus_one = check_convergence(metric, cfg, iteration, chain)
             if r_minus_one is not None:
                 print_master(f"  R-1 = {r_minus_one:.6f}  (threshold: {cfg.convergence_threshold})")
-                metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged,
-                                                        r_minus_one_old=r_minus_one_old)
+                metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
                 if use_convergence and converged:
                     print_master(f"\nConverged at iteration {iteration}!\n")
                     final_converged = True
