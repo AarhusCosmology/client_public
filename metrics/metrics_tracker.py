@@ -26,8 +26,6 @@ class SamplingMetrics:
 class ResamplingMetrics:
     iteration: int
     candidates_processed: int
-    rejected_emulated: int
-    rejected_true: int
     accepted: int
     resampling_time: float
     n_initial_samples: int = 0
@@ -75,11 +73,10 @@ class MetricsTracker:
         ))
     
     def add_resampling_metrics(self, iteration: int, candidates_processed: int,
-                             rejected_emulated: int, rejected_true: int,
                              accepted: int, resampling_time: float,
                              n_initial_samples: int = 0) -> None:
         self.resampling_metrics.append(ResamplingMetrics(
-            iteration, candidates_processed, rejected_emulated, rejected_true, accepted, resampling_time, n_initial_samples
+            iteration, candidates_processed, accepted, resampling_time, n_initial_samples
         ))
     
     def add_iteration_metrics(self, iteration: int, total_iteration_time: float) -> None:
@@ -273,11 +270,10 @@ class MetricsTracker:
                 if parts[0] == 'tot':
                     continue
                 it, processed, accepted = int(parts[0]), int(parts[1]), int(parts[2])
-                rejected_emulated, rejected_true = int(parts[4]), int(parts[5])
                 evals, time = int(parts[6]), float(parts[7])*60
-                n_initial = evals - accepted - rejected_true if it == 0 else 0
+                n_initial = evals - accepted if it == 0 else 0
                 if it < start_iteration:
-                    metrics.append(ResamplingMetrics(it, processed, rejected_emulated, rejected_true, accepted, time, n_initial))
+                    metrics.append(ResamplingMetrics(it, processed, accepted, time, n_initial))
             return metrics
         
         def parse_convergence_section(content):

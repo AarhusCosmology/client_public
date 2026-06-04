@@ -112,8 +112,6 @@ def _handle_random_resampling(cfg, samples, true_likelihood, param_names, use_mp
         if return_metrics:
             resampling_metrics = {
                 'candidates_processed': cfg.n_candidates,
-                'rejected_emulated': 0,
-                'rejected_true': 0,
                 'accepted': len(x_new),
                 'resampling_time': time.time() - start_time,
                 'n_initial_samples': cfg.n_samples
@@ -124,8 +122,6 @@ def _handle_random_resampling(cfg, samples, true_likelihood, param_names, use_mp
     if return_metrics:
         resampling_metrics = {
             'candidates_processed': 0,
-            'rejected_emulated': 0,
-            'rejected_true': 0,
             'accepted': 0,
             'resampling_time': 0,
             'n_initial_samples': 0
@@ -373,8 +369,6 @@ def generate_resamples(cfg, samples, loglkls, true_likelihood, x_all, y_all, x_s
                 resampling_time = time.time() - start_time
                 resampling_metrics = {
                     'candidates_processed': len(X_cand),
-                    'rejected_emulated': n_rejected_emul,
-                    'rejected_true': n_rejected_true,
                     'accepted': n_accepted,
                     'resampling_time': resampling_time,
                     'n_initial_samples': cfg.n_samples
@@ -386,8 +380,6 @@ def generate_resamples(cfg, samples, loglkls, true_likelihood, x_all, y_all, x_s
             if return_metrics:
                 resampling_metrics = {
                     'candidates_processed': 0,
-                    'rejected_emulated': 0,
-                    'rejected_true': 0,
                     'accepted': 0,
                     'resampling_time': 0,
                     'n_initial_samples': 0
