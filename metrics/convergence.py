@@ -83,7 +83,8 @@ def load_chain_from_h5(chain_path, group="mcmc"):
 
 
 def compute_and_save_statistics(cfg, iteration, chain):
-    mean, cov = compute_chain_statistics(chain, n_samples=cfg.convergence_n_samples)
+    n_samples = getattr(cfg, 'convergence_n_samples', 100000)
+    mean, cov = compute_chain_statistics(chain, n_samples=n_samples)
     save_chain_statistics(cfg.convergence_stats_dir, iteration, mean, cov)
     return mean, cov
 
