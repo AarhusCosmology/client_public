@@ -17,7 +17,10 @@ class BaseLikelihood(ABC):
     @property
     def varying_param_names(self) -> List[str]:
         return list(self.param['varying'].keys())
-    
+
+    def get_param_names(self) -> List[str]:
+        return self.varying_param_names
+
     @property
     def fixed_param_names(self) -> List[str]:
         return list(self.param['fixed'].keys())
