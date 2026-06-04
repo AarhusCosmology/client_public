@@ -2,7 +2,10 @@
 
 import tensorflow as tf
 
+
+@tf.keras.utils.register_keras_serializable()
 class CustomTanh(tf.keras.layers.Layer):
+    """Scalar-learnable tanh: a(x) = tanh(alpha * x). Kept for loading legacy models."""
     def __init__(self, initial_alpha=1.0, **kwargs):
         super().__init__(**kwargs)
         self.initial_alpha = initial_alpha
@@ -16,46 +19,45 @@ class CustomTanh(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    @tf.function(jit_compile=True)
     def call(self, inputs):
         return tf.math.tanh(self.alpha * inputs)
-    
+
     def get_config(self):
         config = super().get_config()
-        config.update({
-            "initial_alpha": self.initial_alpha
-        })
+        config.update({"initial_alpha": self.initial_alpha})
         return config
-    
-class Alsing(tf.keras.layers.Layer):
-    def __init__(self, initial_beta=1.0, initial_gamma=0.0, **kwargs):
-        super().__init__(**kwargs)
-        self.initial_beta = initial_beta
-        self.initial_gamma = initial_gamma
 
+
+@tf.keras.utils.register_keras_serializable()
+class Alsing(tf.keras.layers.Layer):
+    """
+    Per-feature Alsing activation: a(x) = (gamma + sigmoid(beta * x) * (1 - gamma)) * x
+
+    beta and gamma are learned independently for each input feature.
+    """
     def build(self, input_shape):
+        units = int(input_shape[-1])
         self.beta = self.add_weight(
             name="beta",
-            shape=(1,),
-            initializer=tf.keras.initializers.Constant(self.initial_beta),
-            trainable=True
+            shape=(units,),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0),
+            trainable=True,
         )
         self.gamma = self.add_weight(
             name="gamma",
-            shape=(1,),
-            initializer=tf.keras.initializers.Constant(self.initial_gamma),
-            trainable=True
+            shape=(units,),
+            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0),
+            trainable=True,
         )
-        super().build(input_shape)
 
-    @tf.function(jit_compile=True)
-    def call(self, inputs):
-        return (self.gamma + (1 - self.gamma) / (1 + tf.exp(-self.beta * inputs))) * inputs
+    def call(self, x):
+        return (self.gamma + tf.sigmoid(self.beta * x) * (1.0 - self.gamma)) * x
 
-    def get_config(self):
-        config = super().get_config()
-        config.update({
-            "initial_beta": self.initial_beta,
-            "initial_gamma": self.initial_gamma
-        })
-        return config
+
+def build_activation(name):
+    """Return an unbuilt Keras activation layer for the given name."""
+    if name == 'alsing':
+        return Alsing()
+    if name == 'custom_tanh':
+        return CustomTanh()
+    return tf.keras.layers.Activation(name)

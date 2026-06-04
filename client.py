@@ -11,7 +11,6 @@ from metrics.metrics_tracker import MetricsTracker
 from metrics.convergence import check_convergence
 from likelihood.montepython_wrapper import MontePythonLikelihood
 from likelihood.cobaya_wrapper import CobayaLikelihood
-from scaling.scaling import make_scalers, save_scalers
 from sampling.initial_sampler import generate_samples
 from utils.mpi_utils import (
     is_mpi_available,
@@ -168,59 +167,67 @@ def should_train_model(iteration_idx, cfg):
     return True
 
 
-def prepare_training_data(x_all, y_all, x_scaler, y_scaler):
-    x_scaled = x_scaler.fit_transform(x_all)
-    y_scaled = y_scaler.fit_transform(y_all.reshape(-1, 1))
-    
-    shuffle_indices = np.random.permutation(len(x_scaled))
-    return x_scaled[shuffle_indices], y_scaled[shuffle_indices]
-
-
 def train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model_func, train_model_func):
     if not is_master():
-        return None, None, None
-    
-    x_scaler, y_scaler = make_scalers(cfg)
-    x_scaled, y_scaled = prepare_training_data(x_all, y_all, x_scaler, y_scaler)
-    save_scalers(cfg, x_scaler, y_scaler, iteration)
-    
+        return None
+
+    from training.losses import build_loss
+
     n_params = len(likelihood.varying_param_names)
-    model = build_model_func(cfg, n_params=n_params)
-    
-    history, training_metrics = train_model_func(
-        cfg=cfg,
-        model=model,
-        x_train=x_scaled,
-        y_train=y_scaled,
-        y_scaler=y_scaler,
-        iteration=iteration,
-        return_metrics=True
+    shuffle_idx = np.random.permutation(len(x_all))
+    inputs  = x_all[shuffle_idx].astype(np.float32)
+    targets = y_all[shuffle_idx].reshape(-1, 1).astype(np.float32)
+
+    loss = build_loss(
+        name=cfg.loss_func,
+        kappa=cfg.kappa_sigma,
+        n=n_params,
+        y_global_max=float(targets.max()),
     )
-    
-    return x_scaler, y_scaler, training_metrics
+
+    model = build_model_func(x_train=inputs, n_layers=cfg.n_layers,
+                             n_neurons=cfg.n_neurons, activation=cfg.act_func)
+
+    history, training_metrics = train_model_func(
+        model=model,
+        inputs=inputs,
+        targets=targets,
+        loss=loss,
+        learning_rate=cfg.learning_rate,
+        n_epochs=cfg.epochs,
+        batch_size=cfg.batch_size,
+        validation_split=cfg.val_split,
+        patience=cfg.patience,
+        return_metrics=True,
+    )
+
+    model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
+    model.save(model_path)
+
+    history_path = os.path.join(cfg.training_history_dir, f'history_it_{iteration}.csv')
+    from training.training import save_history
+    save_history(history.history, history_path)
+
+    return training_metrics
 
 
-def broadcast_scalers(x_scaler, y_scaler, using_mpi):
-    if not using_mpi:
-        return x_scaler, y_scaler
-    
-    comm = get_communicator()
-    return comm.bcast(x_scaler, root=0), comm.bcast(y_scaler, root=0)
-
-
-def run_sampling_step(cfg, likelihood, iteration, EmulatedLikelihood, run_sampler):
+def run_sampling_step(cfg, likelihood, iteration, run_sampler):
     if not is_master():
         return None, None, None, None
-    
+
+    from model.network import load_model
+    from likelihood.surrogate import SurrogateLikelihood
+
     model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
-    x_scaler_path = os.path.join(cfg.scaler_dir, f'x_scaler_it_{iteration}.pkl')
-    y_scaler_path = os.path.join(cfg.scaler_dir, f'y_scaler_it_{iteration}.pkl')
     chain_path = os.path.join(cfg.chains_dir, f'chain_it_{iteration}.h5') if cfg.save_chains else None
-    
-    emulated_likelihood = EmulatedLikelihood(model_path, x_scaler_path, y_scaler_path, true_likelihood=likelihood)
-    samples, tempered_loglkls, sampling_metrics, sampler = run_sampler(cfg, emulated_likelihood, chain_path=chain_path, return_metrics=True, return_sampler=True)
+
+    model = load_model(model_path)
+    surrogate = SurrogateLikelihood(true_likelihood=likelihood, model=model)
+    samples, tempered_loglkls, sampling_metrics, sampler = run_sampler(
+        cfg, surrogate, chain_path=chain_path, return_metrics=True, return_sampler=True
+    )
     loglkls = tempered_loglkls * cfg.temperature
-    
+
     return samples, loglkls, sampling_metrics, sampler
 
 
@@ -271,11 +278,10 @@ def main():
     
     likelihood = initialize_likelihood(cfg)
     
-    from model.model import build_model
+    from model.network import build_model
     from training.training import train_model, save_training_data, load_training_data
     from sampling.sampler import run_sampler
     from sampling.resampler import generate_resamples
-    from likelihood.surrogate import EmulatedLikelihood
     
     if cfg.run_mode == 'default':
         start_it = 0
@@ -320,24 +326,14 @@ def main():
         else:
             print_master(f"--- Iteration {iteration}/{start_it + max_iterations - 1} ---")
         
-        x_scaler, y_scaler = None, None
         if should_train_model(i, cfg):
-            x_scaler, y_scaler, training_metrics = train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model, train_model)
-            
+            training_metrics = train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model, train_model)
             if is_master():
                 metrics_tracker.add_training_metrics(iteration=iteration, **training_metrics)
-        else:
-            if is_master():
-                x_scaler, y_scaler = make_scalers(cfg)
-                x_scaler.fit(x_all)
-                y_scaler.fit(y_all.reshape(-1, 1))
-                save_scalers(cfg, x_scaler, y_scaler, iteration)
-        
+
         barrier()
-        x_scaler, y_scaler = broadcast_scalers(x_scaler, y_scaler, using_mpi)
-        barrier()
-        
-        samples, loglkls, sampling_metrics, sampler = run_sampling_step(cfg, likelihood, iteration, EmulatedLikelihood, run_sampler)
+
+        samples, loglkls, sampling_metrics, sampler = run_sampling_step(cfg, likelihood, iteration, run_sampler)
         
         if is_master():
             metrics_tracker.add_sampling_metrics(iteration=iteration, **sampling_metrics)
@@ -382,6 +378,14 @@ def main():
                     x_all = bcast_array(x_all)
                     y_all = bcast_array(y_all)
             
+            if is_master():
+                from sklearn.preprocessing import StandardScaler
+                x_scaler = StandardScaler().fit(x_all)
+            else:
+                x_scaler = None
+            if using_mpi:
+                x_scaler = get_communicator().bcast(x_scaler, root=0)
+
             x_new, y_new, resampling_metrics = run_resampling_step(
                 cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples
             )
