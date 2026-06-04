@@ -16,10 +16,8 @@ from getdist import MCSamples, plots
 from matplotlib.lines import Line2D
 from scipy import stats
 from config.config_loader import load_config
-from likelihood.surrogate import EmulatedLikelihood
-from likelihood.montepython_wrapper import MontePythonLikelihood
-from likelihood.cobaya_wrapper import CobayaLikelihood
-from sampling.sampler import run_sampler
+from likelihood.surrogate import SurrogateLikelihood
+from sampling.sampler import build_sampler
 from training.training import load_training_data
 
 textwidth_pts = 440
@@ -96,11 +94,8 @@ def compute_kl_divergence_kde(samples_p, samples_q, param_indices=None, max_samp
 
 
 def load_likelihood_from_config(cfg):
-    if cfg.wrapper == 'montepython':
-        return MontePythonLikelihood(cfg.param, cfg.conf, cfg.path, silent=True)
-    elif cfg.wrapper == 'cobaya':
-        return CobayaLikelihood(cfg.param, debug=False)
-    raise ValueError(f"Unknown likelihood wrapper: {cfg.wrapper}")
+    from likelihood.base import build_likelihood
+    return build_likelihood(cfg.wrapper, cfg.param)
 
 
 def load_montepython_chains(chain_dir, param_names, thin=1):

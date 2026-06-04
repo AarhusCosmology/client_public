@@ -1,8 +1,6 @@
 likelihood:
   wrapper: montepython # 'montepython' or 'cobaya'
   input: input/montepython/example.param # path to the MontePython parameter (.param) or Cobaya input (.yaml) file
-  conf: config/default.conf # path to MontePython config file
-  path: resources/montepython_public/montepython # path to MontePython
 
 data:
   n_samples: 100 # number of initial samples drawn via Latin hypercube

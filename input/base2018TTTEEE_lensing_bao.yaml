@@ -1,8 +1,6 @@
 likelihood:
   wrapper: montepython
   input: input/montepython/base2018TTTEEE_lensing_bao.param
-  conf: config/default.conf
-  path: resources/montepython_public/montepython
 
 data:
   n_samples: 5000
