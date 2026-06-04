@@ -3,6 +3,7 @@
 import os
 import time
 import argparse
+from pathlib import Path
 
 import numpy as np
 
@@ -17,7 +18,7 @@ from sampling.initial_sampler import generate_samples
 from sampling.sampler import build_sampler
 from training.dataset import TrainingDataset
 from training.losses import build_loss
-from training.training import train_model, save_history, save_training_data, load_training_data
+from training.training import train_model, save_history
 from utils.mpi_utils import (
     is_mpi_available,
     is_master,
@@ -43,7 +44,6 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-    from pathlib import Path
     path = Path(args.input_or_dir)
     if path.is_dir() and (path / 'training_data').exists():
         args.mode = 'continue'
@@ -113,37 +113,31 @@ def main():
                 print_master(f"  Warning: filtered {(~valid).sum()}/{len(y_init)} outliers with log-lkl < -1e20")
                 x_init, y_init = x_init[valid], y_init[valid]
             print_master(f"  Done in {time.time() - t0:.1f}s\n")
-            save_training_data(x_init, y_init, os.path.join(cfg.training_data_dir, 'data_it_0.h5'))
-            x_all, y_all = x_init, y_init
+            dataset = TrainingDataset(
+                inputs=x_init.astype(np.float32),
+                targets=y_init.reshape(-1, 1).astype(np.float32),
+                likelihood=likelihood,
+                n_neighbors=cfg.n_neighbors,
+                target_temperature=cfg.target_temperature,
+            )
+            dataset.save(Path(cfg.training_data_dir) / 'training_data_it_0.csv')
         else:
-            x_all = y_all = None
+            dataset = None
 
     else:  # continue run
         start_it = cfg.start_it
 
         if is_master():
-            x_parts, y_parts = [], []
-            for i in range(start_it + 1):
-                x_i, y_i = load_training_data(os.path.join(cfg.training_data_dir, f'data_it_{i}.h5'))
-                x_parts.append(x_i)
-                y_parts.append(y_i)
-            x_all = np.vstack(x_parts)
-            y_all = np.concatenate(y_parts)
-            print_master(f"Loaded {len(y_all)} training points from {start_it + 1} iteration(s).\n")
+            dataset = TrainingDataset.load(
+                training_data_dir=cfg.training_data_dir,
+                likelihood=likelihood,
+                n_neighbors=cfg.n_neighbors,
+                target_temperature=cfg.target_temperature,
+                iteration=cfg.start_it,
+            )
+            print_master(f"Loaded {len(dataset.inputs)} training points (iteration {cfg.start_it}).\n")
         else:
-            x_all = y_all = None
-
-    # ---- Training dataset (master only) ----
-    if is_master():
-        dataset = TrainingDataset(
-            inputs=x_all.astype(np.float32),
-            targets=y_all.reshape(-1, 1).astype(np.float32),
-            likelihood=likelihood,
-            n_neighbors=cfg.n_neighbors,
-            target_temperature=cfg.target_temperature,
-        )
-    else:
-        dataset = None
+            dataset = None
 
     # ---- Iteration limits ----
     if cfg.n_it is not None:
@@ -178,9 +172,9 @@ def main():
             if os.path.exists(model_path) and not cfg.retrain:
                 print_master(f"Loading existing model from {model_path}")
             else:
-                shuffle_idx = np.random.permutation(len(x_all))
-                inputs  = x_all[shuffle_idx].astype(np.float32)
-                targets = y_all[shuffle_idx].reshape(-1, 1).astype(np.float32)
+                shuffle_idx = np.random.permutation(len(dataset.inputs))
+                inputs  = dataset.inputs[shuffle_idx]
+                targets = dataset.targets[shuffle_idx]
 
                 model = build_model(
                     x_train=inputs,
@@ -312,14 +306,9 @@ def main():
 
                 n_added     = len(dataset.inputs) - n_before
                 resamp_time = time.time() - t_resamp
-                x_new = dataset.inputs[n_before:].copy()
-                y_new = dataset.targets.flatten()[n_before:].copy()
 
                 print_master(f"  Resampling: +{n_added} points in {resamp_time:.1f}s")
-                save_training_data(x_new, y_new,
-                                   os.path.join(cfg.training_data_dir, f'data_it_{iteration + 1}.h5'))
-                x_all = np.concatenate([x_all, x_new], axis=0)
-                y_all = np.concatenate([y_all, y_new])
+                dataset.save(Path(cfg.training_data_dir) / f'training_data_it_{iteration + 1}.csv')
                 metrics_tracker.add_resampling_metrics(
                     iteration=iteration,
                     candidates_processed=min(cfg.pool_factor * cfg.n_augment, len(chain)),
