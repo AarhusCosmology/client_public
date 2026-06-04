@@ -9,8 +9,7 @@ from config.config_loader import load_config_cli
 from config.run_manager import write_run_log, append_convergence_info
 from metrics.metrics_tracker import MetricsTracker
 from metrics.convergence import check_convergence
-from likelihood.montepython_wrapper import MontePythonLikelihood
-from likelihood.cobaya_wrapper import CobayaLikelihood
+from likelihood.base import build_likelihood
 from sampling.initial_sampler import generate_samples
 from utils.mpi_utils import (
     is_mpi_available,
@@ -81,26 +80,10 @@ def initialize_configuration(args, using_mpi):
 
 def initialize_likelihood(cfg):
     print_master("Initializing likelihood...")
-    
-    if cfg.wrapper == 'montepython':
-        likelihood = MontePythonLikelihood(
-            param_file=cfg.param,
-            conf_file=cfg.conf,
-            montepython_path=cfg.path,
-            silent=(not is_master())
-        )
-    elif cfg.wrapper == 'cobaya':
-        likelihood = CobayaLikelihood(
-            yaml_file=cfg.param,
-            debug=False
-        )
-    else:
-        raise ValueError(f"Unknown likelihood wrapper: {cfg.wrapper}")
-    
-    n_std = getattr(cfg, 'n_sigma', None)
-    if n_std is not None:
-        likelihood.restrict_prior(n_std=n_std)
-    
+    likelihood = build_likelihood(cfg.wrapper, cfg.param)
+    n_sigma = getattr(cfg, 'n_sigma', None)
+    if n_sigma is not None:
+        likelihood.restrict_prior_bounds(n_sigma=n_sigma)
     return likelihood
 
 
