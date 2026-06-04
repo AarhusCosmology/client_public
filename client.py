@@ -289,32 +289,50 @@ def run_sampling_step(cfg, likelihood, iteration, sampler=None, surrogate=None):
     return chain, loglkls, sampling_metrics, sampler, surrogate, full_chain
 
 
-def run_resampling_step(cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples):
+def run_resampling_step(cfg, likelihood, samples, loglkls, dataset, surrogate, iteration):
+    """Augment the training dataset with new points selected from the MCMC chain.
+
+    Master process runs TrainingDataset.augment(); non-master returns empty arrays.
+    """
+    if not is_master():
+        ndim = len(likelihood.varying_param_names)
+        return np.empty((0, ndim)), np.empty(0), {}
+
     print_master(f"Starting resampling for iteration {iteration}...")
-    resampling_start = time.time()
-    
-    x_new, y_new, resampling_metrics = generate_resamples(
-        cfg=cfg,
-        samples=samples,
-        loglkls=loglkls,
-        true_likelihood=likelihood,
-        x_all=x_all,
-        y_all=y_all,
-        x_scaler=x_scaler,
-        return_metrics=True,
-        use_mpi=using_mpi
+    n_before = len(dataset.inputs)
+    start = time.time()
+
+    # loglkls from run_sampling_step are raw log-likelihoods (log_L);
+    # TrainingDataset.augment expects tempered log-posteriors (log_L / T_MC).
+    logposts_tempered = (loglkls / cfg.temperature).astype(np.float64)
+
+    dataset.augment(
+        chain=samples,
+        logposts=logposts_tempered,
+        surrogate=surrogate,
+        n_augment=cfg.n_candidates,
+        sampling_temperature=cfg.temperature,
+        pool_factor=cfg.pool_factor,
     )
-    
-    if is_master():
-        elapsed = time.time() - resampling_start
-        n_accepted = len(x_new)
-        print_master(f"Resampling completed in {elapsed:.2f}s")
-        if n_accepted > 0:
-            print_master(f"   Accepted {n_accepted} new samples ({elapsed/n_accepted:.2f}s per accepted sample)\n")
-        else:
-            print_master("")
-    
-    return x_new, y_new, resampling_metrics
+    elapsed = time.time() - start
+
+    n_added = len(dataset.inputs) - n_before
+    x_new = dataset.inputs[n_before:].copy()
+    y_new = dataset.targets.flatten()[n_before:].copy()
+
+    print_master(f"Resampling completed in {elapsed:.2f}s")
+    if n_added > 0:
+        print_master(f"   Accepted {n_added} new samples ({elapsed/n_added:.2f}s per accepted sample)\n")
+    else:
+        print_master("")
+
+    metrics = {
+        'candidates_processed': min(cfg.pool_factor * cfg.n_candidates, len(samples)),
+        'accepted': n_added,
+        'resampling_time': elapsed,
+    }
+
+    return x_new, y_new, metrics
 
 
 def update_training_data(x_all, y_all, x_new, y_new, is_master_proc):
@@ -338,7 +356,7 @@ def main():
     
     from model.network import build_model
     from training.training import train_model, save_training_data, load_training_data
-    from sampling.resampler import generate_resamples
+    from training.dataset import TrainingDataset
     
     if cfg.run_mode == 'default':
         start_it = 0
@@ -370,9 +388,20 @@ def main():
         max_iterations = 1
         use_convergence = False
     
+    if is_master():
+        _dataset = TrainingDataset(
+            inputs=x_all.astype(np.float32),
+            targets=y_all.reshape(-1, 1).astype(np.float32),
+            likelihood=likelihood,
+            n_neighbors=cfg.k_NN,
+            target_temperature=cfg.temperature_training,
+        )
+    else:
+        _dataset = None
+
     final_iteration = start_it
     final_converged = False
-    _sampler  = None
+    _sampler   = None
     _surrogate = None
     
     for i in range(max_iterations):
@@ -437,16 +466,8 @@ def main():
                     x_all = bcast_array(x_all)
                     y_all = bcast_array(y_all)
             
-            if is_master():
-                from sklearn.preprocessing import StandardScaler
-                x_scaler = StandardScaler().fit(x_all)
-            else:
-                x_scaler = None
-            if using_mpi:
-                x_scaler = get_communicator().bcast(x_scaler, root=0)
-
             x_new, y_new, resampling_metrics = run_resampling_step(
-                cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples
+                cfg, likelihood, samples, loglkls, _dataset, _surrogate, iteration
             )
             
             if is_master():

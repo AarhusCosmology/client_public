@@ -68,6 +68,7 @@ def create_base_namespace(config):
         k_NN=int(data['iterative']['k_NN']),
         temperature_training=float(data['iterative']['temperature']),
         update_freq=int(data['iterative']['update_freq']),
+        pool_factor=int(data['iterative'].get('pool_factor', 20)),
 
         n_layers=int(model['n_layers']),
         n_neurons=int(model['n_neurons']),
