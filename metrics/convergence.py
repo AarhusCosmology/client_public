@@ -12,12 +12,12 @@ def _summarise(chain):
 
 
 def _marginal_r_minus_one(current_summary, prev_summary):
-    """Max over parameters of max(|Δμ|, |Δσ|) / σ̄."""
+    """Max over parameters of max(|Δμ|, |Δσ|) / σ̄  (per-parameter normalisation)."""
     mu_c,  sig_c  = current_summary['mean'], current_summary['std']
     mu_p,  sig_p  = prev_summary['mean'],    prev_summary['std']
     sigma_bar = 0.5 * (sig_c + sig_p)
     sigma_bar = np.where(sigma_bar > 1e-10, sigma_bar, 1.0)
-    return float(np.maximum(np.abs(mu_c - mu_p), np.abs(sig_c - sig_p)).max() / sigma_bar.min())
+    return float((np.maximum(np.abs(mu_c - mu_p), np.abs(sig_c - sig_p)) / sigma_bar).max())
 
 
 def _multivariate_r_minus_one(current_summary, prev_summary):
