@@ -107,11 +107,11 @@ def load_config_cli(args):
         run_mode = 'retrain_continue' if args.retrain else 'skip_retrain_continue'
         run_id = run_dir.name
 
-        if args.start_it is None:
+        if args.start is None:
             start_it = _find_latest_iteration(run_dir)
             print(f"Auto-detected latest iteration: {start_it}")
         else:
-            start_it = args.start_it
+            start_it = args.start
 
         subdirs = {name: str(run_dir / name) for name in SUBDIRECTORIES}
     else:
@@ -129,10 +129,10 @@ def load_config_cli(args):
     namespace.run_dir   = str(run_dir)
     namespace.run_mode  = run_mode
     namespace.start_it  = start_it
-    namespace.n_it      = args.n_it
+    namespace.n_it      = args.iterations
     namespace.retrain   = getattr(args, 'retrain', False)
 
-    namespace.convergence_enabled = (args.n_it is None)
+    namespace.convergence_enabled = (args.iterations is None)
 
     namespace.training_data_dir   = subdirs['training_data']
     namespace.trained_models_dir  = subdirs['trained_models']

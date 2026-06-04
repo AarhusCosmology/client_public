@@ -34,18 +34,12 @@ def parse_arguments():
     parser = argparse.ArgumentParser(
         description='CLiENT: Cosmological Likelihood Emulator using Neural networks with TensorFlow'
     )
-    parser.add_argument('input_or_dir',
-                        help='Input YAML file (new run) or run directory (continue)')
-    parser.add_argument('-n', '--name',
-                        help='Run name/tag for organisation (new runs only)')
-    parser.add_argument('-o', '--output', default='results',
-                        help='Base output directory (new runs only)')
-    parser.add_argument('-r', '--retrain', action='store_true',
-                        help='Force retrain the model for the starting iteration (continue only)')
-    parser.add_argument('-s', '--start-it', type=int,
-                        help='Starting iteration (continue only, auto-detected if omitted)')
-    parser.add_argument('-i', '--n-it', type=int,
-                        help='Number of iterations to run (overrides convergence criterion)')
+    parser.add_argument('input_or_dir', help='Input YAML file (new run) or run directory (continue)')
+    parser.add_argument('-n', '--name', help='Run name/tag for organisation (new runs only)')
+    parser.add_argument('-o', '--output', default='results', help='Base output directory (new runs only)')
+    parser.add_argument('-r', '--retrain', action='store_true', help='Force retrain even if a saved model exists')
+    parser.add_argument('-s', '--start', type=int, help='Starting iteration (continue only, auto-detected if omitted)')
+    parser.add_argument('-i', '--iterations', type=int, help='Number of (additional) iterations to run (overrides convergence criterion)')
 
     args = parser.parse_args()
 
