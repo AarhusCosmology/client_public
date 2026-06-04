@@ -267,10 +267,11 @@ def main():
         # -- Convergence check --
         converged = False
         if is_master():
-            converged, r_minus_one = check_convergence(cfg, iteration, full_chain)
+            converged, r_minus_one, r_minus_one_old = check_convergence(cfg, iteration, full_chain)
             if r_minus_one is not None:
                 print_master(f"  R-1 = {r_minus_one:.6f}  (threshold: {cfg.convergence_threshold})")
-                metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
+                metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged,
+                                                        r_minus_one_old=r_minus_one_old)
                 if use_convergence and converged:
                     print_master(f"\nConverged at iteration {iteration}!\n")
                     final_converged = True
