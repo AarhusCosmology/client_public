@@ -6,12 +6,13 @@ import argparse
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from config.config_loader import load_config_cli
 from config.run_manager import write_run_log, append_convergence_info
 from likelihood.base import build_likelihood
 from likelihood.surrogate import SurrogateLikelihood
-from metrics.convergence import check_convergence, build_convergence_metric
+from metrics.convergence import build_convergence_metric
 from metrics.metrics_tracker import MetricsTracker
 from model.network import build_model, load_model
 from sampling.initial_sampler import generate_samples
@@ -151,6 +152,13 @@ def main():
 
     surrogate = sampler = None
     metric = build_convergence_metric(cfg.convergence_metric)
+    prev_chain_summary = None
+    if is_master() and cfg.run_mode != 'default' and cfg.start_it > 0:
+        prev_path = Path(cfg.convergence_stats_dir) / f'chain_summary_it_{cfg.start_it - 1}.csv'
+        if prev_path.exists():
+            df = pd.read_csv(prev_path)
+            prev_chain_summary = {'mean': df['mean'].to_numpy(), 'std': df['std'].to_numpy()}
+            print_master(f"Loaded previous chain summary from {prev_path}")
     final_iteration = start_it
     final_converged = False
 
@@ -268,8 +276,14 @@ def main():
         # -- Convergence check --
         converged = False
         if is_master():
-            converged, r_minus_one = check_convergence(metric, cfg, iteration, chain)
-            if r_minus_one is not None:
+            chain_summary = metric.summarise(chain)
+            summary_path = Path(cfg.convergence_stats_dir) / f'chain_summary_it_{iteration}.csv'
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame({'mean': chain_summary['mean'], 'std': chain_summary['std']}).to_csv(summary_path, index=False)
+
+            if prev_chain_summary is not None:
+                r_minus_one = metric.compute_from_summary(chain, prev_chain_summary)
+                converged = r_minus_one < cfg.convergence_threshold
                 print_master(f"  R-1 = {r_minus_one:.6f}  (threshold: {cfg.convergence_threshold})")
                 metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
                 if use_convergence and converged:
@@ -277,6 +291,7 @@ def main():
                     final_converged = True
             else:
                 print_master("  R-1 not yet calculable (need >= 2 iterations)")
+            prev_chain_summary = chain_summary
 
         if use_convergence:
             if using_mpi:
