@@ -1,101 +1,57 @@
 # metrics/convergence.py
 
-import os
 import numpy as np
-import pickle
+import pandas as pd
 from pathlib import Path
 
 
-def compute_chain_statistics(chain, n_samples=100000):
-    n_steps, _, n_params = chain.shape
-    
-    chain = chain[n_steps // 2:]
-    
-    flat_chain = chain.reshape(-1, n_params)
-    n_total_samples = flat_chain.shape[0]
-    
-    n_subsample = min(n_samples, n_total_samples)
-    indices = np.random.choice(n_total_samples, size=n_subsample, replace=False)
-    subsampled_chain = flat_chain[indices]
-    
-    mean = np.mean(subsampled_chain, axis=0)
-    cov = np.cov(subsampled_chain, rowvar=False)
-    
-    return mean, cov
+def _summarise(chain):
+    """Compute per-parameter marginal mean and std from a (steps, walkers, ndim) chain."""
+    flat = chain.reshape(-1, chain.shape[-1])
+    return {'mean': flat.mean(axis=0), 'std': flat.std(axis=0)}
 
 
-def compute_gelman_rubin_from_stats(mean_i, cov_i, mean_im1, cov_im1):
-    n_params = mean_i.shape[0]
-    
-    means = np.array([mean_im1, mean_i])
-    
-    W = (cov_im1 + cov_i) / 2
-    B = np.atleast_2d(np.cov(means, rowvar=False))
-
-    d = np.sqrt(np.diag(B))
-    d = np.where(d > 1e-10, d, 1.0)
-    
-    corr_means = (B / d).T / d
-    norm_W = (W / d).T / d
-    norm_W += 1e-8 * np.eye(n_params)
-    
-    try:
-        L = np.linalg.cholesky(norm_W)
-        L_inv = np.linalg.inv(L)
-    except np.linalg.LinAlgError:
-        eigvals, eigvecs = np.linalg.eigh(norm_W)
-        eigvals = np.maximum(eigvals, 1e-8)
-        L = eigvecs @ np.diag(np.sqrt(eigvals))
-        L_inv = eigvecs @ np.diag(1.0 / np.sqrt(eigvals))
-    
-    M = L_inv @ corr_means @ L_inv.T
-    eigenvalues = np.linalg.eigvalsh(M)
-    
-    return float(np.max(eigenvalues))
+def _marginal_r_minus_one(current_summary, prev_summary):
+    """Max over parameters of max(|Δμ|, |Δσ|) / σ̄."""
+    mu_c,  sig_c  = current_summary['mean'], current_summary['std']
+    mu_p,  sig_p  = prev_summary['mean'],    prev_summary['std']
+    sigma_bar = 0.5 * (sig_c + sig_p)
+    sigma_bar = np.where(sigma_bar > 1e-10, sigma_bar, 1.0)
+    return float(np.maximum(np.abs(mu_c - mu_p), np.abs(sig_c - sig_p)).max() / sigma_bar.min())
 
 
-def save_chain_statistics(stats_dir, iteration, mean, cov):
-    os.makedirs(stats_dir, exist_ok=True)
-    stats_path = os.path.join(stats_dir, f'chain_stats_it_{iteration}.pkl')
-    
-    with open(stats_path, 'wb') as f:
-        pickle.dump({'mean': mean, 'cov': cov}, f)
+def _save_summary(stats_dir, iteration, summary):
+    path = Path(stats_dir)
+    path.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'mean': summary['mean'], 'std': summary['std']}).to_csv(
+        path / f'chain_summary_it_{iteration}.csv', index=False
+    )
 
 
-def load_chain_statistics(stats_dir, iteration):
-    stats_path = os.path.join(stats_dir, f'chain_stats_it_{iteration}.pkl')
-    
-    if not os.path.exists(stats_path):
-        return None, None
-    
-    with open(stats_path, 'rb') as f:
-        stats = pickle.load(f)
-    
-    return stats['mean'], stats['cov']
-
-
-def compute_and_save_statistics(cfg, iteration, chain):
-    n_samples = getattr(cfg, 'convergence_n_samples', 100000)
-    mean, cov = compute_chain_statistics(chain, n_samples=n_samples)
-    save_chain_statistics(cfg.convergence_stats_dir, iteration, mean, cov)
-    return mean, cov
+def _load_summary(stats_dir, iteration):
+    path = Path(stats_dir) / f'chain_summary_it_{iteration}.csv'
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    return {'mean': df['mean'].to_numpy(), 'std': df['std'].to_numpy()}
 
 
 def check_convergence(cfg, iteration, chain):
-    """Save statistics for `iteration` and compute R-1 against iteration-1.
+    """Summarise `chain`, save to CSV, and compute marginal R-1 against iteration-1.
 
     Returns (converged, r_minus_one). r_minus_one is None when iteration < 1
-    or when previous stats have not been saved yet.
+    or when the previous summary has not been saved yet.
     """
-    mean_i, cov_i = compute_and_save_statistics(cfg, iteration, chain)
+    summary = _summarise(chain)
+    _save_summary(cfg.convergence_stats_dir, iteration, summary)
 
     if iteration < 1:
         return False, None
 
-    mean_im1, cov_im1 = load_chain_statistics(cfg.convergence_stats_dir, iteration - 1)
-    if mean_im1 is None:
+    prev_summary = _load_summary(cfg.convergence_stats_dir, iteration - 1)
+    if prev_summary is None:
         return False, None
 
-    r_minus_one = compute_gelman_rubin_from_stats(mean_i, cov_i, mean_im1, cov_im1)
+    r_minus_one = _marginal_r_minus_one(summary, prev_summary)
     converged = r_minus_one < cfg.convergence_threshold
     return converged, r_minus_one
