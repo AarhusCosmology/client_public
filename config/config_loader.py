@@ -135,6 +135,7 @@ def load_config_cli(args):
     namespace.run_mode  = run_mode
     namespace.start_it  = start_it
     namespace.n_it      = args.n_it
+    namespace.retrain   = getattr(args, 'retrain', False)
 
     namespace.convergence_enabled = (args.n_it is None)
 

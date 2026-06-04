@@ -154,6 +154,13 @@ def train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model_
     if not is_master():
         return None
 
+    model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
+    retrain = getattr(cfg, 'retrain', False)
+
+    if os.path.exists(model_path) and not retrain:
+        print_master(f"Loading existing model from {model_path}")
+        return None  # sampling step will load it from disk
+
     from training.losses import build_loss
 
     n_params = len(likelihood.varying_param_names)
@@ -184,7 +191,6 @@ def train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model_
         return_metrics=True,
     )
 
-    model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
     model.save(model_path)
 
     history_path = os.path.join(cfg.training_history_dir, f'history_it_{iteration}.csv')
@@ -399,7 +405,7 @@ def main():
         
         if should_train_model(i, cfg):
             training_metrics = train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model, train_model)
-            if is_master():
+            if is_master() and training_metrics is not None:
                 metrics_tracker.add_training_metrics(iteration=iteration, **training_metrics)
 
         barrier()
