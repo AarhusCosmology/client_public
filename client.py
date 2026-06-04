@@ -253,14 +253,15 @@ def main():
 
             loglkls       = logposts * cfg.temperature
             sampling_time = time.time() - t_sample
-            steps_done    = sampler._sampler.iteration if hasattr(sampler, '_sampler') else cfg.max_steps
+            steps_done    = sampler._sampler.iteration if hasattr(sampler, '_sampler') else len(sampler.get_chain())
 
             print_master(f"  {len(chain)} samples in {sampling_time:.1f}s ({steps_done} steps)")
             metrics_tracker.add_sampling_metrics(
                 iteration=iteration,
                 steps_to_convergence=int(steps_done),
-                acceptance_rate=0.0,
+                acceptance_rate=sampler.get_acceptance_fraction(),
                 sampling_time=sampling_time,
+                final_max_tau=sampler.get_last_tau(),
             )
 
         # -- Convergence check --
@@ -311,6 +312,7 @@ def main():
                     candidates_processed=min(cfg.pool_factor * cfg.n_augment, len(chain)),
                     accepted=n_added,
                     resampling_time=resamp_time,
+                    n_initial_samples=cfg.n_samples if (i == 0 and cfg.run_mode == 'default') else 0,
                 )
 
         if is_master():

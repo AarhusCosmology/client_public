@@ -23,6 +23,15 @@ class BaseSampler(ABC):
     def get_logpost(self, **kwargs):
         pass
 
+    @abstractmethod
+    def get_acceptance_fraction(self) -> float:
+        pass
+
+    @abstractmethod
+    def get_last_tau(self) -> float:
+        """Return max integrated autocorrelation time over all parameters, or None."""
+        pass
+
 
 class EmceeSampler(BaseSampler):
     """Wrapper around emcee.EnsembleSampler using a TF-compiled logpost_fn."""
@@ -108,6 +117,15 @@ class EmceeSampler(BaseSampler):
 
     def get_logpost(self, flat=False, discard=0, thin=1):
         return self._sampler.get_log_prob(flat=flat, discard=discard, thin=thin)
+
+    def get_acceptance_fraction(self) -> float:
+        return float(self._sampler.acceptance_fraction.mean())
+
+    def get_last_tau(self):
+        try:
+            return float(self._sampler.get_autocorr_time(quiet=False).max())
+        except emcee.autocorr.AutocorrError:
+            return None
 
 
 class EnsembleSampler(BaseSampler):
@@ -293,6 +311,17 @@ class EnsembleSampler(BaseSampler):
         if flat:
             logp = tf.reshape(logp, (-1,))
         return logp
+
+    def get_acceptance_fraction(self) -> float:
+        chain = self._chain  # (steps, walkers, ndim)
+        changed = tf.reduce_any(tf.not_equal(chain[1:], chain[:-1]), axis=-1)  # (steps-1, walkers)
+        return float(tf.reduce_mean(tf.cast(changed, tf.float32)).numpy())
+
+    def get_last_tau(self):
+        tau, reliable = self.iat()
+        if not reliable.numpy():
+            return None
+        return float(tau.numpy().max())
 
 
 def build_sampler(name, n_walkers, ndim, logpost_fn):
