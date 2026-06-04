@@ -25,8 +25,34 @@ class SurrogateLikelihood(BaseLikelihood):
             'derived': true_likelihood.param['derived'].copy(),
         }
 
+        # Pre-compute TF bound tensors for vectorised prior evaluation.
+        bounds = true_likelihood.get_prior_bounds()
+        names  = self.varying_param_names
+        self._lower = tf.constant([bounds[n][0] for n in names], dtype=tf.float32)
+        self._upper = tf.constant([bounds[n][1] for n in names], dtype=tf.float32)
+
     # ------------------------------------------------------------------
-    # Batch prediction (used by the sampler hot path)
+    # TF-native batch interface (used by EnsembleSampler / EmceeSampler)
+    # ------------------------------------------------------------------
+
+    def logpost(self, positions):
+        """TF-native batch log-posterior.
+
+        Parameters
+        ----------
+        positions : tf.Tensor, shape (n, ndim)
+
+        Returns
+        -------
+        tf.Tensor, shape (n,)
+        """
+        loglkls   = tf.squeeze(self.model(positions, training=False), axis=1)
+        in_bounds = tf.reduce_all((positions >= self._lower) & (positions <= self._upper), axis=1)
+        logpriors = tf.where(in_bounds, 0.0, -np.inf)
+        return loglkls + logpriors
+
+    # ------------------------------------------------------------------
+    # Batch prediction (used by the resampler)
     # ------------------------------------------------------------------
 
     def predict(self, x: np.ndarray) -> np.ndarray:

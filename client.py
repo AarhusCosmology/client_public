@@ -211,24 +211,82 @@ def train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model_
     return training_metrics
 
 
-def run_sampling_step(cfg, likelihood, iteration, run_sampler):
+def run_sampling_step(cfg, likelihood, iteration, sampler=None, surrogate=None):
     if not is_master():
-        return None, None, None, None
+        return None, None, None, None, None, None
 
     from model.network import load_model
     from likelihood.surrogate import SurrogateLikelihood
+    from sampling.sampler import build_sampler
 
     model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
-    chain_path = os.path.join(cfg.chains_dir, f'chain_it_{iteration}.h5') if cfg.save_chains else None
 
     model = load_model(model_path)
-    surrogate = SurrogateLikelihood(true_likelihood=likelihood, model=model)
-    samples, tempered_loglkls, sampling_metrics, sampler = run_sampler(
-        cfg, surrogate, chain_path=chain_path, return_metrics=True, return_sampler=True
-    )
-    loglkls = tempered_loglkls * cfg.temperature
 
-    return samples, loglkls, sampling_metrics, sampler
+    if surrogate is None:
+        # First iteration: build surrogate and sampler from scratch.
+        surrogate = SurrogateLikelihood(true_likelihood=likelihood, model=model)
+        param_names = likelihood.varying_param_names
+        ndim = len(param_names)
+        prior_bounds = likelihood.get_prior_bounds()
+        temperature = cfg.temperature
+
+        logpost_fn = lambda positions: surrogate.logpost(positions) / temperature
+
+        sampler = build_sampler(
+            name=cfg.sampling_method,
+            n_walkers=cfg.n_walkers,
+            ndim=ndim,
+            logpost_fn=logpost_fn,
+        )
+    else:
+        # Subsequent iterations: update model weights in-place so the compiled
+        # logpost_fn graph stays valid without retracing.
+        surrogate.model.set_weights(model.get_weights())
+        prior_bounds = likelihood.get_prior_bounds()
+
+    ndim = len(likelihood.varying_param_names)
+    initial_pos = np.random.uniform(
+        low =[b[0] for b in prior_bounds.values()],
+        high=[b[1] for b in prior_bounds.values()],
+        size=(cfg.n_walkers, ndim),
+    )
+
+    start_time = time.time()
+    sampler.run(
+        initial_pos=initial_pos,
+        max_steps=cfg.max_steps,
+        chunk_size=cfg.chunk_size,
+        target_ess=cfg.target_ess,
+        tau_stability=cfg.tau_stability,
+        iat_memory_mb=cfg.iat_memory_mb,
+    )
+    sampling_time = time.time() - start_time
+
+    chain    = sampler.get_chain(discard=cfg.burn_in, flat=True)
+    logposts = sampler.get_logpost(discard=cfg.burn_in, flat=True)
+
+    if hasattr(chain, 'numpy'):
+        chain    = chain.numpy()
+        logposts = logposts.numpy()
+
+    loglkls = logposts * cfg.temperature
+
+    steps_done = sampler.get_chain().shape[0] + cfg.burn_in if hasattr(sampler, '_chain') and sampler._chain is not None else cfg.max_steps
+    if hasattr(sampler, '_sampler'):
+        steps_done = sampler._sampler.iteration
+
+    sampling_metrics = {
+        'steps_to_convergence': int(steps_done),
+        'acceptance_rate': 0.0,
+        'sampling_time': sampling_time,
+    }
+
+    full_chain = sampler.get_chain(discard=cfg.burn_in)
+    if hasattr(full_chain, 'numpy'):
+        full_chain = full_chain.numpy()
+
+    return chain, loglkls, sampling_metrics, sampler, surrogate, full_chain
 
 
 def run_resampling_step(cfg, likelihood, samples, loglkls, x_all, y_all, x_scaler, using_mpi, iteration, generate_resamples):
@@ -280,7 +338,6 @@ def main():
     
     from model.network import build_model
     from training.training import train_model, save_training_data, load_training_data
-    from sampling.sampler import run_sampler
     from sampling.resampler import generate_resamples
     
     if cfg.run_mode == 'default':
@@ -315,6 +372,8 @@ def main():
     
     final_iteration = start_it
     final_converged = False
+    _sampler  = None
+    _surrogate = None
     
     for i in range(max_iterations):
         iteration_start = time.time()
@@ -333,15 +392,15 @@ def main():
 
         barrier()
 
-        samples, loglkls, sampling_metrics, sampler = run_sampling_step(cfg, likelihood, iteration, run_sampler)
+        samples, loglkls, sampling_metrics, _sampler, _surrogate, current_chain = run_sampling_step(
+            cfg, likelihood, iteration, sampler=_sampler, surrogate=_surrogate
+        )
         
         if is_master():
             metrics_tracker.add_sampling_metrics(iteration=iteration, **sampling_metrics)
-        
+
         converged = False
         if is_master():
-            current_chain = sampler.get_chain()
-            
             from metrics.convergence import compute_and_save_statistics
             compute_and_save_statistics(cfg, iteration, current_chain)
             

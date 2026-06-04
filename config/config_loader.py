@@ -88,10 +88,10 @@ def create_base_namespace(config):
         n_walkers=int(emcee['n_walkers']),
         burn_in=int(emcee['burn_in']),
         max_steps=int(emcee['max_steps']),
-        ess_target=int(emcee['ess_target']),
+        target_ess=int(emcee.get('target_ess', emcee.get('ess_target', 50))),
         chunk_size=int(emcee['chunk_size']),
-        delta_tau_tol=float(emcee['delta_tau_tol']),
-        ac_thin=int(emcee['ac_thin']),
+        tau_stability=float(emcee.get('tau_stability', emcee.get('delta_tau_tol', 0.01))),
+        iat_memory_mb=float(emcee['iat_memory_mb']) if emcee.get('iat_memory_mb') is not None else None,
         
         convergence_threshold=float(convergence['r_minus_one_threshold']),
         convergence_n_samples=100000,
