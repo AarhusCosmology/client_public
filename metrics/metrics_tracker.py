@@ -268,7 +268,7 @@ class MetricsTracker:
                 if parts[0] == 'tot':
                     continue
                 it, processed, accepted = int(parts[0]), int(parts[1]), int(parts[2])
-                evals, time = int(parts[6]), float(parts[7])*60
+                evals, time = int(parts[4]), float(parts[5])*60
                 n_initial = evals - accepted if it == 0 else 0
                 if it < start_iteration:
                     metrics.append(ResamplingMetrics(it, processed, accepted, time, n_initial))

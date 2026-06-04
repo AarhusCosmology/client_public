@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import pickle
+from pathlib import Path
 
 
 def compute_chain_statistics(chain, n_samples=100000):
@@ -73,15 +74,6 @@ def load_chain_statistics(stats_dir, iteration):
     return stats['mean'], stats['cov']
 
 
-def load_chain_from_h5(chain_path, group="mcmc"):
-    import h5py
-    
-    with h5py.File(chain_path, 'r') as f:
-        chain = f[group]['chain'][:]
-    
-    return chain
-
-
 def compute_and_save_statistics(cfg, iteration, chain):
     n_samples = getattr(cfg, 'convergence_n_samples', 100000)
     mean, cov = compute_chain_statistics(chain, n_samples=n_samples)
@@ -89,35 +81,21 @@ def compute_and_save_statistics(cfg, iteration, chain):
     return mean, cov
 
 
-def check_convergence(cfg, iteration, current_chain=None):
+def check_convergence(cfg, iteration, chain):
+    """Save statistics for `iteration` and compute R-1 against iteration-1.
+
+    Returns (converged, r_minus_one). r_minus_one is None when iteration < 1
+    or when previous stats have not been saved yet.
+    """
+    mean_i, cov_i = compute_and_save_statistics(cfg, iteration, chain)
+
     if iteration < 1:
         return False, None
-    
-    if current_chain is not None:
-        mean_i, cov_i = compute_and_save_statistics(cfg, iteration, current_chain)
-    else:
-        mean_i, cov_i = load_chain_statistics(cfg.convergence_stats_dir, iteration)
-        
-        if mean_i is None:
-            chain_path_i = os.path.join(cfg.chains_dir, f'chain_it_{iteration}.h5')
-            if not os.path.exists(chain_path_i):
-                return False, None
-            
-            chain_i = load_chain_from_h5(chain_path_i)
-            mean_i, cov_i = compute_and_save_statistics(cfg, iteration, chain_i)
-    
+
     mean_im1, cov_im1 = load_chain_statistics(cfg.convergence_stats_dir, iteration - 1)
-    
     if mean_im1 is None:
-        chain_path_im1 = os.path.join(cfg.chains_dir, f'chain_it_{iteration-1}.h5')
-        if not os.path.exists(chain_path_im1):
-            return False, None
-        
-        chain_im1 = load_chain_from_h5(chain_path_im1)
-        mean_im1, cov_im1 = compute_and_save_statistics(cfg, iteration - 1, chain_im1)
-    
+        return False, None
+
     r_minus_one = compute_gelman_rubin_from_stats(mean_i, cov_i, mean_im1, cov_im1)
-    
     converged = r_minus_one < cfg.convergence_threshold
-    
     return converged, r_minus_one
