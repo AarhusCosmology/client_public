@@ -163,8 +163,7 @@ def main():
     final_converged = False
 
     # ===== Main loop =====
-    for i in range(n_iterations):
-        iteration       = start_it + i
+    for iteration in range(start_it, start_it + n_iterations):
         final_iteration = iteration
         t_iter          = time.time()
 
@@ -175,7 +174,7 @@ def main():
 
         # -- Training --
         model_path = os.path.join(cfg.trained_models_dir, f'trained_model_it_{iteration}.keras')
-        skip_train = (cfg.run_mode == 'skip_retrain_continue' and i == 0)
+        skip_train = (cfg.run_mode == 'skip_retrain_continue' and iteration == start_it)
 
         if not skip_train and is_master():
             if os.path.exists(model_path) and not cfg.retrain:
@@ -218,7 +217,7 @@ def main():
         barrier()
 
         # -- Sampling --
-        chain = loglkls = full_chain = None
+        chain = logposts = None
         if is_master():
             model = load_model(model_path)
 
@@ -256,11 +255,8 @@ def main():
             logposts   = sampler.get_logpost(discard=cfg.burn_in, flat=True)
 
             if hasattr(chain, 'numpy'):
-                full_chain = full_chain.numpy()
-                chain      = chain.numpy()
-                logposts   = logposts.numpy()
-
-            loglkls       = logposts * cfg.temperature
+                chain    = chain.numpy()
+                logposts = logposts.numpy()
             sampling_time = time.time() - t_sample
             steps_done    = sampler._sampler.iteration if hasattr(sampler, '_sampler') else len(sampler.get_chain())
 
@@ -303,15 +299,14 @@ def main():
                 break
 
         # -- Resampling (skip on the last iteration) --
-        if i < n_iterations - 1:
+        if iteration < start_it + n_iterations - 1:
             if is_master():
-                logposts_tempered = (loglkls / cfg.temperature).astype(np.float64)
                 n_before  = len(dataset.inputs)
                 t_resamp  = time.time()
 
                 dataset.augment(
                     chain=chain,
-                    logposts=logposts_tempered,
+                    logposts=logposts.astype(np.float64),
                     surrogate=surrogate,
                     n_augment=cfg.n_augment,
                     sampling_temperature=cfg.temperature,
@@ -328,7 +323,7 @@ def main():
                     candidates_processed=min(cfg.pool_factor * cfg.n_augment, len(chain)),
                     accepted=n_added,
                     resampling_time=resamp_time,
-                    n_initial_samples=cfg.n_samples if (i == 0 and cfg.run_mode == 'default') else 0,
+                    n_initial_samples=cfg.n_samples if (iteration == start_it and cfg.run_mode == 'default') else 0,
                 )
 
         if is_master():
