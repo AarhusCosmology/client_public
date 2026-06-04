@@ -38,10 +38,9 @@ sampling:
     n_walkers: 216
     max_steps: 100000
     burn_in: 5000
-    ess_target: 50
-    delta_tau_tol: 0.05
+    target_ess: 50
+    tau_stability: 0.05
     chunk_size: 5000
-    ac_thin: 10
 
 convergence:
   r_minus_one_threshold: 0.01
