@@ -153,25 +153,23 @@ class MetricsTracker:
             return
         
         f.write("Resampling Metrics:\n")
-        f.write("-" * 95 + "\n")
-        f.write(f"{'it':<3} | {'processed':<9} | {'accepted':<8} | {'ar':<7} | {'rejected (surrogate)':<20} | {'rejected':<8} | {'evals':<6} | {'time':<6}\n")
-        f.write("-" * 95 + "\n")
+        f.write("-" * 65 + "\n")
+        f.write(f"{'it':<3} | {'processed':<9} | {'accepted':<8} | {'ar':<7} | {'evals':<6} | {'time':<6}\n")
+        f.write("-" * 65 + "\n")
         
         for m in self.resampling_metrics:
             initial_samples = m.n_initial_samples if m.iteration == 0 else 0
-            evals = initial_samples + m.accepted + m.rejected_true
-            f.write(f"{m.iteration:<3} | {m.candidates_processed:<9} | {m.accepted:<8} | {m.acceptance_rate:<7.4f} | {m.rejected_emulated:<20} | {m.rejected_true:<8} | {evals:<6} | {m.resampling_time/60:<6.2f}\n")
+            evals = initial_samples + m.accepted
+            f.write(f"{m.iteration:<3} | {m.candidates_processed:<9} | {m.accepted:<8} | {m.acceptance_rate:<7.4f} | {evals:<6} | {m.resampling_time/60:<6.2f}\n")
         
-        f.write("-" * 95 + "\n")
+        f.write("-" * 65 + "\n")
         tot_processed = sum(m.candidates_processed for m in self.resampling_metrics)
         tot_accepted = sum(m.accepted for m in self.resampling_metrics)
         tot_ar = tot_accepted / tot_processed if tot_processed > 0 else 0
-        tot_rej_surrogate = sum(m.rejected_emulated for m in self.resampling_metrics)
-        tot_rej_true = sum(m.rejected_true for m in self.resampling_metrics)
         initial_samples_total = sum(m.n_initial_samples if m.iteration == 0 else 0 for m in self.resampling_metrics)
-        tot_evals = initial_samples_total + tot_accepted + tot_rej_true
+        tot_evals = initial_samples_total + tot_accepted
         tot_time = sum(m.resampling_time for m in self.resampling_metrics)
-        f.write(f"{'tot':<3} | {tot_processed:<9} | {tot_accepted:<8} | {tot_ar:<7.4f} | {tot_rej_surrogate:<20} | {tot_rej_true:<8} | {tot_evals:<6} | {tot_time/60:<6.2f}\n")
+        f.write(f"{'tot':<3} | {tot_processed:<9} | {tot_accepted:<8} | {tot_ar:<7.4f} | {tot_evals:<6} | {tot_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_iteration_metrics(self, f):
