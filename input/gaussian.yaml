@@ -5,9 +5,6 @@ likelihood:
   path:
 
 data:
-  scalers:
-    parameters: standard
-    targets: standard
   initial:
     n_samples: 5000
     strategy: lhs
@@ -25,7 +22,7 @@ model:
   activation: alsing
 
 training:
-  n_epochs: 5000
+  n_epochs: 50
   batch_size: 128
   loss: msre
   kappa_sigma: 3
@@ -36,7 +33,7 @@ training:
 sampling:
   save_chains: false
   temperature: 7.0
-  method: emcee
+  method: ensemble
   emcee:
     n_walkers: 216
     max_steps: 100000

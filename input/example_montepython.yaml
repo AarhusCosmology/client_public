@@ -5,9 +5,6 @@ likelihood:
   path: resources/montepython_public/montepython # path to MontePython (can be removed or left empty if using Cobaya)
 
 data:
-  scalers:
-    parameters: standard # 'standard' or 'minmax' scaling for input parameters
-    targets: standard # 'standard' or 'minmax' scaling for targets (loglkl)
   initial:
     n_samples: 100 # number of initial samples to draw from the likelihood
     strategy: lhs # initial sampling strategy: 'lhs' (latin hypercube sampling) or 'random'

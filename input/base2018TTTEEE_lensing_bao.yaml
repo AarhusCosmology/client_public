@@ -5,9 +5,6 @@ likelihood:
   path: resources/montepython_public/montepython
 
 data:
-  scalers:
-    parameters: standard
-    targets: standard
   initial:
     n_samples: 5000
     strategy: lhs

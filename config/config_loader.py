@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from datetime import datetime
 
-SUBDIRECTORIES = ['scalers', 'training_data', 'trained_models', 'training_history', 'training_chains', 'convergence_stats']
+SUBDIRECTORIES = ['training_data', 'trained_models', 'training_history', 'training_chains', 'convergence_stats']
 
 def _find_latest_iteration(run_dir):
     trained_models_dir = run_dir / 'trained_models'
@@ -55,9 +55,6 @@ def create_base_namespace(config):
         param=str(likelihood['param']),
         conf=str(conf_path),
         path=str(montepython_path),
-        
-        x_scaler_type=str(data['scalers']['parameters']),
-        y_scaler_type=str(data['scalers']['targets']),
         
         n_samples=int(data['initial']['n_samples']),
         s_strategy=str(data['initial']['strategy']),
@@ -140,7 +137,6 @@ def load_config_cli(args):
     
     namespace.convergence_enabled = (args.n_it is None)
     
-    namespace.scaler_dir = subdirs['scalers']
     namespace.training_data_dir = subdirs['training_data']
     namespace.trained_models_dir = subdirs['trained_models']
     namespace.training_history_dir = subdirs['training_history']
