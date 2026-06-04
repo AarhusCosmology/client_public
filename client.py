@@ -97,7 +97,7 @@ def initialize_likelihood(cfg):
     else:
         raise ValueError(f"Unknown likelihood wrapper: {cfg.wrapper}")
     
-    n_std = getattr(cfg, 'n_std', None)
+    n_std = getattr(cfg, 'n_sigma', None)
     if n_std is not None:
         likelihood.restrict_prior(n_std=n_std)
     
@@ -109,7 +109,7 @@ def generate_initial_samples(cfg, likelihood, using_mpi):
         samples = generate_samples(
             likelihood=likelihood,
             n_samples=cfg.n_samples,
-            strategy=cfg.s_strategy
+            strategy='lhs'
         )
     else:
         samples = None
@@ -196,7 +196,7 @@ def train_iteration_model(cfg, likelihood, x_all, y_all, iteration, build_model_
         learning_rate=cfg.learning_rate,
         n_epochs=cfg.epochs,
         batch_size=cfg.batch_size,
-        validation_split=cfg.val_split,
+        validation_split=cfg.validation_split,
         patience=cfg.patience,
         return_metrics=True,
     )
@@ -234,7 +234,7 @@ def run_sampling_step(cfg, likelihood, iteration, sampler=None, surrogate=None):
         logpost_fn = lambda positions: surrogate.logpost(positions) / temperature
 
         sampler = build_sampler(
-            name=cfg.sampling_method,
+            name=cfg.sampler,
             n_walkers=cfg.n_walkers,
             ndim=ndim,
             logpost_fn=logpost_fn,
@@ -310,7 +310,7 @@ def run_resampling_step(cfg, likelihood, samples, loglkls, dataset, surrogate, i
         chain=samples,
         logposts=logposts_tempered,
         surrogate=surrogate,
-        n_augment=cfg.n_candidates,
+        n_augment=cfg.n_augment,
         sampling_temperature=cfg.temperature,
         pool_factor=cfg.pool_factor,
     )
@@ -327,7 +327,7 @@ def run_resampling_step(cfg, likelihood, samples, loglkls, dataset, surrogate, i
         print_master("")
 
     metrics = {
-        'candidates_processed': min(cfg.pool_factor * cfg.n_candidates, len(samples)),
+        'candidates_processed': min(cfg.pool_factor * cfg.n_augment, len(samples)),
         'accepted': n_added,
         'resampling_time': elapsed,
     }
@@ -393,8 +393,8 @@ def main():
             inputs=x_all.astype(np.float32),
             targets=y_all.reshape(-1, 1).astype(np.float32),
             likelihood=likelihood,
-            n_neighbors=cfg.k_NN,
-            target_temperature=cfg.temperature_training,
+            n_neighbors=cfg.n_neighbors,
+            target_temperature=cfg.target_temperature,
         )
     else:
         _dataset = None
