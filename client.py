@@ -250,23 +250,26 @@ def main():
                 iat_memory_mb=cfg.iat_memory_mb,
             )
 
-            full_chain = sampler.get_chain(discard=cfg.burn_in)
-            chain      = sampler.get_chain(discard=cfg.burn_in, flat=True)
-            logposts   = sampler.get_logpost(discard=cfg.burn_in, flat=True)
+            chain      = sampler.get_chain(discard=cfg.burn_in, flat=True).copy()
+            logposts   = sampler.get_logpost(discard=cfg.burn_in, flat=True).copy()
+            acceptance = sampler.get_acceptance_fraction()
+            # Free the raw chain immediately — it's 2+ GB and no longer needed.
+            sampler._chain    = None
+            sampler._log_prob = None
 
             if hasattr(chain, 'numpy'):
                 chain    = chain.numpy()
                 logposts = logposts.numpy()
             sampling_time = time.time() - t_sample
-            steps_done    = sampler._sampler.iteration if hasattr(sampler, '_sampler') else len(sampler.get_chain())
+            steps_done    = sampler._sampler.iteration if hasattr(sampler, '_sampler') else len(chain)
 
             print_master(f"  {len(chain)} samples in {sampling_time:.1f}s ({steps_done} steps)")
             metrics_tracker.add_sampling_metrics(
                 iteration=iteration,
                 steps_to_convergence=int(steps_done),
-                acceptance_rate=sampler.get_acceptance_fraction(),
+                acceptance_rate=acceptance,
                 sampling_time=sampling_time,
-                final_max_tau=sampler.get_last_tau(),
+                final_max_tau=sampler.get_last_tau() if (cfg.target_ess is not None or cfg.tau_stability is not None) else None,
             )
 
         # -- Convergence check --

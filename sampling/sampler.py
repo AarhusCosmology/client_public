@@ -157,8 +157,9 @@ class EnsembleSampler(BaseSampler):
         self._z_offset = tf.constant(1.0 / sqrt_a,          dtype=tf.float32)
         self._z_range  = tf.constant(sqrt_a - 1.0 / sqrt_a, dtype=tf.float32)
 
-        self._chain    = None
-        self._log_prob = None
+        self._chain        = None
+        self._log_prob     = None
+        self._iat_memory_mb = None
         self._compiled_run = tf.function(self._run_steps, jit_compile=True)
 
     def _step(self, pos, logp):
@@ -211,6 +212,7 @@ class EnsembleSampler(BaseSampler):
 
     def run(self, initial_pos, max_steps, chunk_size=None, target_ess=None,
             tau_stability=0.01, iat_memory_mb=None, progress=True):
+        self._iat_memory_mb = iat_memory_mb
         pos  = tf.cast(initial_pos, tf.float32)
         logp = self.logpost_fn(pos)
 
@@ -223,8 +225,8 @@ class EnsembleSampler(BaseSampler):
             self._compiled_run(_dummy_pos, _dummy_logp, tf.constant(_remainder))
 
         if chunk_size is None or target_ess is None:
-            chain_buf = tf.Variable(tf.zeros((max_steps, self.n_walkers, self.ndim), dtype=tf.float32), trainable=False)
-            logp_buf  = tf.Variable(tf.zeros((max_steps, self.n_walkers),            dtype=tf.float32), trainable=False)
+            chain_buf = np.empty((max_steps, self.n_walkers, self.ndim), dtype=np.float32)
+            logp_buf  = np.empty((max_steps, self.n_walkers),            dtype=np.float32)
             steps_done = 0
             pbar = tqdm(total=max_steps, desc="Sampling") if progress else None
             while steps_done < max_steps:
@@ -232,8 +234,8 @@ class EnsembleSampler(BaseSampler):
                 chunk_chain, chunk_logp = self._compiled_run(pos, logp, tf.constant(steps_this))
                 pos  = chunk_chain[-1]
                 logp = chunk_logp[-1]
-                chain_buf[steps_done:steps_done + steps_this].assign(chunk_chain)
-                logp_buf[steps_done:steps_done + steps_this].assign(chunk_logp)
+                chain_buf[steps_done:steps_done + steps_this] = chunk_chain.numpy()
+                logp_buf[steps_done:steps_done + steps_this]  = chunk_logp.numpy()
                 steps_done += steps_this
                 if pbar is not None:
                     pbar.update(steps_this)
@@ -250,8 +252,8 @@ class EnsembleSampler(BaseSampler):
         if _remainder2 > 0:
             self._compiled_run(_dummy_pos, _dummy_logp, tf.constant(_remainder2))
 
-        chain_buf = tf.Variable(tf.zeros((max_steps, self.n_walkers, self.ndim), dtype=tf.float32), trainable=False)
-        logp_buf  = tf.Variable(tf.zeros((max_steps, self.n_walkers),            dtype=tf.float32), trainable=False)
+        chain_buf = np.empty((max_steps, self.n_walkers, self.ndim), dtype=np.float32)
+        logp_buf  = np.empty((max_steps, self.n_walkers),            dtype=np.float32)
         prev_tau   = None
         steps_done = 0
         pbar = tqdm(total=max_steps, desc="Sampling") if progress else None
@@ -263,8 +265,8 @@ class EnsembleSampler(BaseSampler):
             logp = chunk_logp[-1]
             start = steps_done
             steps_done += steps_this_chunk
-            chain_buf[start:steps_done].assign(chunk_chain)
-            logp_buf[start:steps_done].assign(chunk_logp)
+            chain_buf[start:steps_done] = chunk_chain.numpy()
+            logp_buf[start:steps_done]  = chunk_logp.numpy()
             if pbar is not None:
                 pbar.update(steps_this_chunk)
 
@@ -303,22 +305,22 @@ class EnsembleSampler(BaseSampler):
     def get_chain(self, flat=False, discard=0, thin=1):
         chain = self._chain[discard::thin]
         if flat:
-            chain = tf.reshape(chain, (-1, self.ndim))
+            chain = chain.reshape(-1, self.ndim)
         return chain
 
     def get_logpost(self, flat=False, discard=0, thin=1):
         logp = self._log_prob[discard::thin]
         if flat:
-            logp = tf.reshape(logp, (-1,))
+            logp = logp.reshape(-1)
         return logp
 
     def get_acceptance_fraction(self) -> float:
-        chain = self._chain  # (steps, walkers, ndim)
-        changed = tf.reduce_any(tf.not_equal(chain[1:], chain[:-1]), axis=-1)  # (steps-1, walkers)
-        return float(tf.reduce_mean(tf.cast(changed, tf.float32)).numpy())
+        chain = self._chain  # already numpy
+        changed = np.any(chain[1:] != chain[:-1], axis=-1)
+        return float(changed.mean())
 
     def get_last_tau(self):
-        tau, reliable = self.iat()
+        tau, reliable = self.iat(iat_memory_mb=self._iat_memory_mb)
         if not reliable.numpy():
             return None
         return float(tau.numpy().max())

@@ -254,38 +254,44 @@ if [ -n "$MONTEPYTHON_PATH" ]; then
     # Detect existing clik installation
     DETECTED_CLIK_PARENT="${RESOURCES_DIR}/planck"
     if [ -n "$CLIK" ] && [ -f "$CLIK/bin/clik_profile.sh" ]; then
-        DETECTED_CLIK_PARENT=$(echo "$CLIK" | sed 's|/code/plc_3.0/plc-3.01$||')
+        DETECTED_CLIK_PARENT=$(dirname "${CLIK%/}")
         print_info "Detected Planck likelihood at: ${CLIK}"
     elif command_exists clik_print_version; then
-        DETECTED_CLIK_PARENT=$(which clik_print_version 2>/dev/null | sed 's|/bin/clik_print_version||;s|/code/plc_3.0/plc-3.01$||')
-        [ -n "$DETECTED_CLIK_PARENT" ] && print_info "Detected Planck likelihood in PATH"
+        _clik_dir=$(which clik_print_version 2>/dev/null | sed 's|/bin/clik_print_version$||')
+        [ -n "$_clik_dir" ] && DETECTED_CLIK_PARENT=$(dirname "$_clik_dir") && \
+            print_info "Detected Planck likelihood in PATH"
     fi
     
     prompt_with_default "Enter directory where Planck likelihood is/will be installed" "$DETECTED_CLIK_PARENT" CLIK_INSTALL_DIR
-    CLIK_PATH="${CLIK_INSTALL_DIR}/code/plc_3.0/plc-3.01"
+    CLIK_PATH="${CLIK_INSTALL_DIR}/clik"
     
     if [ -d "$CLIK_PATH" ] && [ -f "$CLIK_PATH/bin/clik_profile.sh" ]; then
         print_success "Using existing Planck likelihood at: ${CLIK_PATH}"
     elif prompt_yes_no "Download and install Planck likelihood?" "y"; then
-        print_info "Downloading and building Planck likelihood..."
+        print_info "Cloning clik and downloading Planck likelihood data..."
         mkdir -p "$CLIK_INSTALL_DIR" && cd "$CLIK_INSTALL_DIR"
         
-        [ ! -f "COM_Likelihood_Code-v3.0_R3.01.tar.gz" ] && \
-            wget -O COM_Likelihood_Code-v3.0_R3.01.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.01.tar.gz"
+        # Clone clik from GitHub
+        if [ ! -d "clik" ]; then
+            git clone https://github.com/benabed/clik.git clik
+        else
+            print_info "clik directory already exists, skipping clone."
+        fi
+        
+        # Download Planck likelihood data from the Planck Legacy Archive
         [ ! -f "COM_Likelihood_Data-baseline_R3.00.tar.gz" ] && \
             wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
+        tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
+        rm COM_Likelihood_Data-baseline_R3.00.tar.gz
         
-        tar -xzf COM_Likelihood_Code-v3.0_R3.01.tar.gz && tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
-        rm COM_Likelihood_Code-v3.0_R3.01.tar.gz COM_Likelihood_Data-baseline_R3.00.tar.gz
-        
-        cd code/plc_3.0/plc-3.01
+        cd clik
         if ./waf configure --install_all_deps && ./waf install; then
             CLIK_PATH="$(pwd)"
             cd "$SCRIPT_DIR"
-            print_success "Planck likelihood installed successfully!"
+            print_success "Planck likelihood (clik) installed successfully!"
         else
             cd "$SCRIPT_DIR"
-            print_error "Planck likelihood installation failed!"
+            print_error "Planck likelihood (clik) installation failed!"
             CLIK_PATH=""
         fi
     else
@@ -376,8 +382,8 @@ if [ -n "$MONTEPYTHON_PATH" ]; then
     
     if [ -n "$CLIK_PATH" ]; then
         grep -q "path\['clik'\]" "$DEFAULT_CONF" && \
-            sed -i "s|path\['clik'\].*|path['clik'] = '${CLIK_PATH}'|g" "$DEFAULT_CONF" || \
-            echo "path['clik'] = '${CLIK_PATH}'" >> "$DEFAULT_CONF"
+            sed -i "s|path\['clik'\].*|path['clik'] = '${CLIK_PATH}/share/clik/'|g" "$DEFAULT_CONF" || \
+            echo "path['clik'] = '${CLIK_PATH}/share/clik/'" >> "$DEFAULT_CONF"
     fi
     
     print_success "Configuration file created: ${DEFAULT_CONF}"

@@ -3,10 +3,12 @@
 import os
 import sys
 import argparse
-import pickle
+import yaml
 import numpy as np
+import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -15,10 +17,9 @@ from datetime import datetime
 from getdist import MCSamples, plots
 from matplotlib.lines import Line2D
 from scipy import stats
-from config.config_loader import load_config
 from likelihood.surrogate import SurrogateLikelihood
+from model.network import load_model
 from sampling.sampler import build_sampler
-from training.training import load_training_data
 
 textwidth_pts = 440
 width_inches = textwidth_pts / 72.27
@@ -93,9 +94,9 @@ def compute_kl_divergence_kde(samples_p, samples_q, param_indices=None, max_samp
     return sum(per_param_kl.values()), per_param_kl
 
 
-def load_likelihood_from_config(cfg):
+def load_likelihood_from_config(config):
     from likelihood.base import build_likelihood
-    return build_likelihood(cfg.wrapper, cfg.param)
+    return build_likelihood(config['likelihood']['wrapper'], config['likelihood']['input'])
 
 
 def load_montepython_chains(chain_dir, param_names, thin=1):
@@ -136,9 +137,8 @@ def load_cobaya_chains(chain_dir, param_names, thin=1):
         
         mult = data[:, header.index('weight')].astype(int)
         minuslogpost = data[:, header.index('minuslogpost')]
-        minuslogprior = data[:, header.index('minuslogprior')]
-        
-        loglkl = -(minuslogpost - minuslogprior)
+
+        loglkl = -minuslogpost
         
         param_cols = []
         for pname in param_names:
@@ -298,7 +298,7 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         mp_bestfit = mp_samples.samples[np.argmin(mp_samples.loglikes)]
         print(f"Reference ({reference_sampler}) maximum of log(likelihood): {-min(mp_samples.loglikes):.4f}")
         if surrogate is not None:
-            surr_at_true_map = surrogate.logpost_array(mp_bestfit.reshape(1, -1))[0]
+            surr_at_true_map = float(surrogate.logpost(tf.cast(mp_bestfit.reshape(1, -1), tf.float32)).numpy()[0])
             print(f"Surrogate log(likelihood) at reference ({reference_sampler}) best-fit: {surr_at_true_map:.4f}")
         
         print()
@@ -378,10 +378,11 @@ def main():
         print(f"Warning: Multiple .yaml files found in {run_dir}. Using {yaml_files[0].name}")
     config_yaml = yaml_files[0]
     
-    cfg = load_config(str(config_yaml))
-    
+    with open(config_yaml) as f:
+        config = yaml.safe_load(f)
+
     if args.n_steps is None:
-        args.n_steps = cfg.max_steps
+        args.n_steps = config['sampling']['max_steps']
     
     if args.iteration is None:
         trained_models_dir = run_dir / 'trained_models'
@@ -407,52 +408,53 @@ def main():
         print(f"Auto-detected latest iteration: {iteration}")
     else:
         iteration = args.iteration
-    true_likelihood = load_likelihood_from_config(cfg)
-    param_names = true_likelihood.varying_param_names
-    
-    if getattr(cfg, 'n_std', None):
-        true_likelihood.restrict_prior(n_std=cfg.n_std)
+    true_likelihood = load_likelihood_from_config(config)
+    param_names = true_likelihood.get_param_names()
+
+    true_likelihood.restrict_prior_bounds(n_sigma=config['data']['n_sigma'])
     prior_bounds = true_likelihood.get_prior_bounds()
-    
+
     x_all = None
     if not args.no_training_data:
-        training_data_dir = run_dir / "training_data"
-        x_list = [load_training_data(str(f))[0] for i in range(iteration + 1) 
-                  if (f := training_data_dir / f'data_it_{i}.h5').exists()]
-        x_all = np.vstack(x_list) if x_list else None
-    
-    surrogate = EmulatedLikelihood(
-        str(run_dir / f"trained_models/trained_model_it_{iteration}.keras"),
-        str(run_dir / f"scalers/x_scaler_it_{iteration}.pkl"),
-        str(run_dir / f"scalers/y_scaler_it_{iteration}.pkl"),
-        true_likelihood=true_likelihood
-    )
-    
+        data_path = run_dir / "training_data" / f'training_data_it_{iteration}.csv'
+        if data_path.exists():
+            df = pd.read_csv(data_path)
+            x_all = df[param_names].to_numpy()
+
+    model = load_model(run_dir / f"trained_models/trained_model_it_{iteration}.keras")
+    surrogate = SurrogateLikelihood(true_likelihood, model)
+
+    burn_in = config['sampling']['burn_in']
+    n_walkers = config['sampling']['n_walkers']
+
     output_dir = run_dir / 'benchmark_chains'
     output_dir.mkdir(exist_ok=True)
-    chain_path = output_dir / f'benchmark_chain_it_{iteration}.h5'
-    
+    chain_path = output_dir / f'benchmark_chain_it_{iteration}.npz'
+
     if chain_path.exists():
-        import emcee
-        reader = emcee.backends.HDFBackend(str(chain_path))
-        chain, log_prob = reader.get_chain(thin=args.thin, discard=cfg.burn_in), reader.get_log_prob(thin=args.thin, discard=cfg.burn_in)
+        data = np.load(chain_path)
+        chain, log_prob = data['chain'], data['log_prob']
         print(f"Loaded chain: {chain.shape}")
     else:
-        print(f"Running emcee: {cfg.n_walkers} walkers, {cfg.burn_in} burn-in, {args.n_steps} steps")
-        chain, log_prob, _ = run_sampler(cfg, surrogate, str(chain_path), vectorize=True, flat=False, 
-                                         temper=False, n_steps=args.n_steps, return_metrics=True)
-        if args.thin > 1:
-            chain, log_prob = chain[::args.thin], log_prob[::args.thin]
-    
-    param_labels = [true_likelihood.param['varying'][p].get('label', p).replace('$', '') for p in param_names]
-    
-    label_overrides = {
-        'deg_ncdm__2': r'N_{\mathrm{eff},s}',
-        'm_ncdm__2': r'm_s'
-    }
-    for i, pname in enumerate(param_names):
-        if pname in label_overrides:
-            param_labels[i] = label_overrides[pname]
+        print(f"Running ensemble sampler: {n_walkers} walkers, {burn_in} burn-in, {args.n_steps} steps")
+        sampler = build_sampler(
+            name='ensemble',
+            n_walkers=n_walkers,
+            ndim=len(param_names),
+            logpost_fn=surrogate.logpost,
+        )
+        initial_pos = np.random.uniform(
+            low=[b[0] for b in prior_bounds.values()],
+            high=[b[1] for b in prior_bounds.values()],
+            size=(n_walkers, len(param_names))
+        )
+        sampler.run(initial_pos=initial_pos, max_steps=args.n_steps, progress=True)
+        chain = sampler.get_chain(discard=burn_in, thin=args.thin).numpy()
+        log_prob = sampler.get_logpost(discard=burn_in, thin=args.thin).numpy()
+        np.savez(chain_path, chain=chain, log_prob=log_prob)
+        print(f"Chain shape: {chain.shape}")
+
+    param_labels = [p.replace('_', r'\_') for p in param_names]
     
     samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])], 
                         names=param_names, labels=param_labels,
@@ -487,7 +489,7 @@ def main():
         except Exception as e:
             print(f"Warning: Could not load chains: {e}")
     
-    surrogate_sampler = cfg.sampling_method if hasattr(cfg, 'sampling_method') else 'emcee'
+    surrogate_sampler = config['sampling']['sampler']
     reference_sampler = None
     if args.chains and chain_format:
         reference_sampler = chain_format
@@ -543,14 +545,13 @@ def main():
     output_path = figure_dir / f'{timestamp}_triangle_plot_it_{iteration}.pdf'
     g.export(str(output_path))
     
-    if not args.no_training_history and (history_path := run_dir / f"training_history/history_it_{iteration}.pkl").exists():
-        with open(history_path, 'rb') as f:
-            history = pickle.load(f)
-        
+    if not args.no_training_history and (history_path := run_dir / f"training_history/history_it_{iteration}.csv").exists():
+        history = pd.read_csv(history_path)
+
         fig, ax = plt.subplots(figsize=(width_inches, width_inches * 0.6))
         epochs = range(len(history['loss']))
-        ax.plot(epochs, history['loss'], label='Training', color='blue', alpha=0.8)
-        ax.plot(epochs, history['val_loss'], label='Validation', color='orange', alpha=0.8)
+        ax.plot(epochs, history['loss'].to_numpy(), label='Training', color='blue', alpha=0.8)
+        ax.plot(epochs, history['val_loss'].to_numpy(), label='Validation', color='orange', alpha=0.8)
         ax.set(xlabel='Epoch', ylabel='Loss', title=f'Training History - Iteration {iteration}', yscale='log')
         ax.grid(alpha=0.3, linewidth=0.5)
         ax.legend()

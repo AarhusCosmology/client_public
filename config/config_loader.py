@@ -81,8 +81,8 @@ def create_base_namespace(config):
         n_walkers=int(sampling['n_walkers']),
         burn_in=int(sampling['burn_in']),
         max_steps=int(sampling['max_steps']),
-        target_ess=int(sampling['target_ess']),
-        tau_stability=float(sampling['tau_stability']),
+        target_ess=int(sampling['target_ess']) if sampling.get('target_ess') is not None else None,
+        tau_stability=float(sampling['tau_stability']) if sampling.get('tau_stability') is not None else None,
         chunk_size=int(sampling['chunk_size']),
         iat_memory_mb=float(sampling['iat_memory_mb']) if sampling.get('iat_memory_mb') is not None else None,
 
