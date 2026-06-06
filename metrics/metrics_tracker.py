@@ -16,7 +16,7 @@ class TrainingMetrics:
 @dataclass
 class SamplingMetrics:
     iteration: int
-    steps_to_convergence: int
+    steps_per_walker: int
     acceptance_rate: float
     sampling_time: float
     final_max_tau: Optional[float] = None
@@ -25,15 +25,15 @@ class SamplingMetrics:
 @dataclass 
 class ResamplingMetrics:
     iteration: int
-    candidates_processed: int
-    accepted: int
+    pool_size: int        # IS pool drawn from chain
+    n_evaluated: int      # candidates sent for true likelihood eval
+    n_added: int          # points with finite log-L added to dataset
     resampling_time: float
-    n_initial_samples: int = 0
     acceptance_rate: float = 0.0
     
     def __post_init__(self):
-        if self.candidates_processed > 0:
-            self.acceptance_rate = self.accepted / self.candidates_processed
+        if self.n_evaluated > 0:
+            self.acceptance_rate = self.n_added / self.n_evaluated
 
 @dataclass
 class IterationMetrics:
@@ -64,19 +64,19 @@ class MetricsTracker:
             iteration, epochs_trained, final_train_loss, final_val_loss, training_time
         ))
     
-    def add_sampling_metrics(self, iteration: int, steps_to_convergence: int,
+    def add_sampling_metrics(self, iteration: int, steps_per_walker: int,
                            acceptance_rate: float, sampling_time: float,
                            final_max_tau: Optional[float] = None,
                            converged: bool = True) -> None:
         self.sampling_metrics.append(SamplingMetrics(
-            iteration, steps_to_convergence, acceptance_rate, sampling_time, final_max_tau, converged
+            iteration, steps_per_walker, acceptance_rate, sampling_time, final_max_tau, converged
         ))
     
-    def add_resampling_metrics(self, iteration: int, candidates_processed: int,
-                             accepted: int, resampling_time: float,
-                             n_initial_samples: int = 0) -> None:
+    def add_resampling_metrics(self, iteration: int, pool_size: int,
+                             n_evaluated: int, n_added: int,
+                             resampling_time: float) -> None:
         self.resampling_metrics.append(ResamplingMetrics(
-            iteration, candidates_processed, accepted, resampling_time, n_initial_samples
+            iteration, pool_size, n_evaluated, n_added, resampling_time
         ))
     
     def add_iteration_metrics(self, iteration: int, total_iteration_time: float) -> None:
@@ -132,16 +132,16 @@ class MetricsTracker:
         
         f.write("Sampling Metrics:\n")
         f.write("-" * 58 + "\n")
-        f.write(f"{'it':<3} | {'steps':<7} | {'ar':<6} | {'max(τ)':<9} | {'converged':<9} | {'time':<6}\n")
+        f.write(f"{'it':<3} | {'steps/w':<7} | {'ar':<6} | {'max(τ)':<9} | {'converged':<9} | {'time':<6}\n")
         f.write("-" * 58 + "\n")
         
         for m in self.sampling_metrics:
             tau_str = f"{m.final_max_tau:.2f}" if m.final_max_tau is not None else "N/A"
             converged_str = "True" if m.converged else "False"
-            f.write(f"{m.iteration:<3} | {m.steps_to_convergence:<7} | {m.acceptance_rate:<6.3f} | {tau_str:<9} | {converged_str:<9} | {m.sampling_time/60:<6.2f}\n")
+            f.write(f"{m.iteration:<3} | {m.steps_per_walker:<7} | {m.acceptance_rate:<6.3f} | {tau_str:<9} | {converged_str:<9} | {m.sampling_time/60:<6.2f}\n")
         
         f.write("-" * 58 + "\n")
-        avg_steps = sum(m.steps_to_convergence for m in self.sampling_metrics) / len(self.sampling_metrics)
+        avg_steps = sum(m.steps_per_walker for m in self.sampling_metrics) / len(self.sampling_metrics)
         avg_ar = sum(m.acceptance_rate for m in self.sampling_metrics) / len(self.sampling_metrics)
         avg_tau = sum(m.final_max_tau for m in self.sampling_metrics if m.final_max_tau is not None) / len([m for m in self.sampling_metrics if m.final_max_tau is not None]) if any(m.final_max_tau is not None for m in self.sampling_metrics) else 0
         avg_time = sum(m.sampling_time for m in self.sampling_metrics) / len(self.sampling_metrics)
@@ -153,23 +153,19 @@ class MetricsTracker:
             return
         
         f.write("Resampling Metrics:\n")
-        f.write("-" * 65 + "\n")
-        f.write(f"{'it':<3} | {'processed':<9} | {'accepted':<8} | {'ar':<7} | {'evals':<6} | {'time':<6}\n")
-        f.write("-" * 65 + "\n")
+        f.write("-" * 46 + "\n")
+        f.write(f"{'it':<3} | {'pool':<6} | {'candidates':<10} | {'accepted':<8} | {'time':<6}\n")
+        f.write("-" * 46 + "\n")
         
         for m in self.resampling_metrics:
-            initial_samples = m.n_initial_samples if m.iteration == 0 else 0
-            evals = initial_samples + m.accepted
-            f.write(f"{m.iteration:<3} | {m.candidates_processed:<9} | {m.accepted:<8} | {m.acceptance_rate:<7.4f} | {evals:<6} | {m.resampling_time/60:<6.2f}\n")
+            f.write(f"{m.iteration:<3} | {m.pool_size:<6} | {m.n_evaluated:<10} | {m.n_added:<8} | {m.resampling_time/60:<6.2f}\n")
         
-        f.write("-" * 65 + "\n")
-        tot_processed = sum(m.candidates_processed for m in self.resampling_metrics)
-        tot_accepted = sum(m.accepted for m in self.resampling_metrics)
-        tot_ar = tot_accepted / tot_processed if tot_processed > 0 else 0
-        initial_samples_total = sum(m.n_initial_samples if m.iteration == 0 else 0 for m in self.resampling_metrics)
-        tot_evals = initial_samples_total + tot_accepted
+        f.write("-" * 46 + "\n")
+        tot_pool = sum(m.pool_size for m in self.resampling_metrics)
+        tot_evaluated = sum(m.n_evaluated for m in self.resampling_metrics)
+        tot_added = sum(m.n_added for m in self.resampling_metrics)
         tot_time = sum(m.resampling_time for m in self.resampling_metrics)
-        f.write(f"{'tot':<3} | {tot_processed:<9} | {tot_accepted:<8} | {tot_ar:<7.4f} | {tot_evals:<6} | {tot_time/60:<6.2f}\n")
+        f.write(f"{'tot':<3} | {tot_pool:<6} | {tot_evaluated:<10} | {tot_added:<8} | {tot_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_iteration_metrics(self, f):
@@ -267,11 +263,10 @@ class MetricsTracker:
                 parts = [p.strip() for p in line.split('|')]
                 if parts[0] == 'tot':
                     continue
-                it, processed, accepted = int(parts[0]), int(parts[1]), int(parts[2])
-                evals, time = int(parts[4]), float(parts[5])*60
-                n_initial = evals - accepted if it == 0 else 0
+                it, pool, sent, added = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+                time = float(parts[5])*60
                 if it < start_iteration:
-                    metrics.append(ResamplingMetrics(it, processed, accepted, time, n_initial))
+                    metrics.append(ResamplingMetrics(it, pool, sent, added, time))
             return metrics
         
         def parse_convergence_section(content):
