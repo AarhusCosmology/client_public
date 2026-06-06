@@ -1,6 +1,7 @@
 import heapq
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from pathlib import Path
 from sklearn.neighbors import NearestNeighbors
 from scipy.special import gamma, logsumexp
@@ -142,18 +143,16 @@ class TrainingDataset:
         dataset.iteration = iteration
         return dataset
 
-    def augment(self, chain, logposts, surrogate, n_augment, sampling_temperature=1.0,
-               pool_factor=20):
-        """Augment the dataset with n_augment new points selected from the MCMC chain.
+    def select_candidates(self, chain, logposts, surrogate, n_augment,
+                          sampling_temperature=1.0, pool_factor=20):
+        """Select n_augment candidate points from the MCMC chain for true-likelihood evaluation.
 
         Draws M = pool_factor * n_augment candidates via importance-weighted
         systematic resampling from the chain (biasing toward the training target
         density L^{1/T}), scores each candidate using the surrogate likelihood
         and the current k-NN density estimate, then runs a lazy min-heap with
         incremental union-query density updates to select the n_augment candidates
-        that are most under-represented relative to the target density. Selected
-        candidates are evaluated with the true likelihood; non-finite results are
-        discarded.
+        that are most under-represented relative to the target density.
 
         The score of a candidate θ is v(θ) = log ρ(θ) - log L_surr(θ) / T.
         A low score means the point lies in a region that is sparse relative to
@@ -173,11 +172,17 @@ class TrainingDataset:
             (uniform prior absorbed).
         surrogate : SurrogateLikelihood
         n_augment : int
-            Number of new training points to add.
+            Number of candidates to select.
         sampling_temperature : float
             Temperature T_MC at which the chain was sampled.
         pool_factor : int
             Pool size multiplier: M = pool_factor * n_augment. Default 20.
+
+        Returns
+        -------
+        selected : np.ndarray, shape (n_selected, ndim)
+            Selected candidate points ready for true-likelihood evaluation.
+            n_selected <= n_augment (may be less if the pool is exhausted).
         """
         chain = np.asarray(chain, dtype=np.float32)
         logposts = np.asarray(logposts, dtype=np.float64)
@@ -208,7 +213,7 @@ class TrainingDataset:
         # Initialised to inf so that training-set distances dominate until points are accepted.
         d_acc_topk = np.full((M, k), np.inf, dtype=np.float64)
 
-        log_L_surrs = np.asarray(surrogate.loglkl_array(candidates), dtype=np.float64)
+        log_L_surrs = surrogate.loglkl(tf.constant(candidates, dtype=tf.float32)).numpy().astype(np.float64)
 
         # Initial bulk scoring (no accepted points yet → d_acc_topk all inf).
         r_k_init = d_train_all[:, k - 1]
@@ -219,11 +224,9 @@ class TrainingDataset:
         heap = [(float(s), i) for i, s in enumerate(init_scores)]
         heapq.heapify(heap)
 
-        new_inputs = []
-        new_targets = []
-        n_lkl_calls = 0
+        selected_indices = []
 
-        while heap and len(new_inputs) < n_augment:
+        while heap and len(selected_indices) < n_augment:
             stored_score, i = heapq.heappop(heap)
 
             # Recompute score using precomputed training distances and the
@@ -237,31 +240,42 @@ class TrainingDataset:
                 heapq.heappush(heap, (float(new_score), i))
                 continue
 
-            # True minimum found — evaluate with the true likelihood.
-            n_lkl_calls += 1
-            log_L_true = self.likelihood.loglkl(dict(zip(self.names, candidates[i])))
-            if not np.isfinite(log_L_true):
-                continue
+            # True minimum found — record candidate and update density incrementally.
+            selected_indices.append(i)
 
-            new_inputs.append(candidates[i])
-            new_targets.append(log_L_true)
-
-            # Incrementally update d_acc_topk for all candidates with the new accepted point.
             d_new = np.sqrt(((candidates_white - candidates_white[i]) ** 2).sum(-1, keepdims=True))
             combined = np.concatenate([d_acc_topk, d_new], axis=1)  # (M, k+1)
             d_acc_topk[:] = np.partition(combined, k - 1, axis=1)[:, :k]
 
-        n_added = len(new_inputs)
-        n_nonfinite = n_lkl_calls - n_added
-        print(f"  {n_added}/{n_augment} points added "
-              f"({n_lkl_calls} true likelihood call(s)"
-              + (f", {n_nonfinite} discarded as non-finite" if n_nonfinite else "")
-              + ")")
+        print(f"  Selected {len(selected_indices)}/{n_augment} candidates for likelihood evaluation")
+        return candidates[selected_indices]
 
-        if new_inputs:
-            self.inputs = np.concatenate([self.inputs, np.array(new_inputs, dtype=np.float32)])
+    def add_evaluated_points(self, candidates, log_L_values):
+        """Append true-likelihood-evaluated points to the dataset.
+
+        Parameters
+        ----------
+        candidates : array, shape (N, ndim)
+            Candidate points returned by select_candidates.
+        log_L_values : array, shape (N,)
+            True log-likelihood values for each candidate.
+        """
+        candidates = np.asarray(candidates, dtype=np.float32)
+        log_L_values = np.asarray(log_L_values, dtype=np.float64)
+
+        valid = np.isfinite(log_L_values)
+        n_nonfinite = int((~valid).sum())
+        new_inputs = candidates[valid]
+        new_targets = log_L_values[valid]
+
+        n_added = len(new_inputs)
+        print(f"  {n_added}/{len(candidates)} points added"
+              + (f", {n_nonfinite} discarded as non-finite" if n_nonfinite else ""))
+
+        if n_added > 0:
+            self.inputs = np.concatenate([self.inputs, new_inputs])
             self.targets = np.concatenate([
                 self.targets,
-                np.array(new_targets, dtype=np.float32).reshape(-1, 1)
+                new_targets.reshape(-1, 1).astype(np.float32),
             ])
             self._nn = _WhitenedKNN(self.inputs, self.n_neighbors + 1)

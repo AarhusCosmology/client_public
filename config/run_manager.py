@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 import re
 
+import pandas as pd
+
 def _strip_yaml_comments(content):
     lines = []
     for line in content.split('\n'):
@@ -72,3 +74,18 @@ def append_convergence_info(run_dir, iteration, converged):
     
     with log_path.open('a') as f:
         f.write(message)
+
+
+def save_chain_summary(convergence_stats_dir, iteration, summary):
+    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.csv'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'mean': summary['mean'], 'std': summary['std']}).to_csv(path, index=False)
+    return path
+
+
+def load_chain_summary(convergence_stats_dir, iteration):
+    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.csv'
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    return {'mean': df['mean'].to_numpy(), 'std': df['std'].to_numpy()}, path

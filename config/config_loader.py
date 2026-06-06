@@ -36,7 +36,7 @@ def create_run_directory(run_name=None, base_results_dir='results'):
     for subdir in subdirs.values():
         subdir.mkdir(parents=True, exist_ok=True)
 
-    return run_id, str(run_dir), {k: str(v) for k, v in subdirs.items()}
+    return run_id, run_dir, subdirs
 
 def create_base_namespace(config):
     likelihood = config['likelihood']
@@ -81,10 +81,6 @@ def create_base_namespace(config):
         n_walkers=int(sampling['n_walkers']),
         burn_in=int(sampling['burn_in']),
         max_steps=int(sampling['max_steps']),
-        target_ess=int(sampling['target_ess']) if sampling.get('target_ess') is not None else None,
-        tau_stability=float(sampling['tau_stability']) if sampling.get('tau_stability') is not None else None,
-        chunk_size=int(sampling['chunk_size']),
-        iat_memory_mb=float(sampling['iat_memory_mb']) if sampling.get('iat_memory_mb') is not None else None,
 
         # convergence
         convergence_metric=str(convergence.get('metric', 'marginal_r_minus_one')),
@@ -113,7 +109,7 @@ def load_config_cli(args):
         else:
             start_it = args.start
 
-        subdirs = {name: str(run_dir / name) for name in SUBDIRECTORIES}
+        subdirs = {name: run_dir / name for name in SUBDIRECTORIES}
     else:
         with open(args.input) as f:
             config = yaml.safe_load(f)
@@ -121,12 +117,11 @@ def load_config_cli(args):
         namespace = create_base_namespace(config)
 
         run_mode = 'default'
-        run_id, run_dir_str, subdirs = create_run_directory(args.name, args.output)
-        run_dir = Path(run_dir_str)
+        run_id, run_dir, subdirs = create_run_directory(args.name, args.output)
         start_it = 0
 
     namespace.run_id    = run_id
-    namespace.run_dir   = str(run_dir)
+    namespace.run_dir   = run_dir
     namespace.run_mode  = run_mode
     namespace.start_it  = start_it
     namespace.n_it      = args.iterations

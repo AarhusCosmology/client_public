@@ -150,3 +150,17 @@ def parallel_evaluate_likelihood(samples, likelihood_func, description="samples"
     if is_master():
         return _gather_results(all_indices, all_results, len(samples))
     return np.array([])
+
+
+def broadcast_and_evaluate(produce_fn, likelihood_func, description="samples"):
+    """Master produces an array of points, broadcast it, then evaluate in parallel.
+
+    ``produce_fn`` is only called on the master rank; the resulting array is
+    broadcast to every rank and evaluated with ``parallel_evaluate_likelihood``.
+    Returns ``(points, values)`` (workers receive the broadcast points and an
+    empty values array, matching ``parallel_evaluate_likelihood``).
+    """
+    points = produce_fn() if is_master() else None
+    points = bcast_array(points)
+    values = parallel_evaluate_likelihood(points, likelihood_func, description=description)
+    return points, values
