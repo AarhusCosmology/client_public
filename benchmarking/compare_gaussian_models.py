@@ -9,6 +9,7 @@ import os
 import sys
 import argparse
 import numpy as np
+import tensorflow as tf
 import matplotlib
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -292,10 +293,10 @@ def evaluate_models(samples, true_likelihood, surrogate1, surrogate2, use_parall
         ])
     
     print("  Evaluating surrogate 1...")
-    surr1_loglkls = surrogate1.predict(samples)
+    surr1_loglkls = surrogate1.loglkl(tf.constant(samples, dtype=tf.float32)).numpy()
     
     print("  Evaluating surrogate 2...")
-    surr2_loglkls = surrogate2.predict(samples)
+    surr2_loglkls = surrogate2.loglkl(tf.constant(samples, dtype=tf.float32)).numpy()
     
     return true_loglkls, surr1_loglkls, surr2_loglkls
 

@@ -24,14 +24,11 @@ training:
   patience: 250 # early-stopping patience
 
 sampling:
-  sampler: ensemble # 'ensemble' (TF-native) or 'emcee'
+  sampler: aies
   temperature: 7.0 # MCMC sampling temperature
   n_walkers: 16
   max_steps: 10000
   burn_in: 500
-  target_ess: 1000 # target effective sample size
-  tau_stability: 0.05 # stopping criterion: relative change in IAT
-  chunk_size: 500
 
 convergence:
   metric: marginal_r_minus_one

@@ -11,6 +11,7 @@ test2/
 
 # MontePython Configuration file
 config/default.conf
+config/montepython.yaml
 
 # Results
 example_chains/

@@ -15,7 +15,7 @@ model:
   activation: alsing
 
 training:
-  n_epochs: 5000
+  n_epochs: 50
   batch_size: 128
   loss: msre
   kappa_sigma: 3
@@ -24,15 +24,12 @@ training:
   patience: 250
 
 sampling:
-  sampler: ensemble
+  sampler: aies
   temperature: 7.0
   n_walkers: 64
   max_steps: 100000
   burn_in: 5000
-  target_ess: null
-  tau_stability: null
-  chunk_size: 5000
-  iat_memory_mb: 256
+
 
 convergence:
   metric: marginal_r_minus_one

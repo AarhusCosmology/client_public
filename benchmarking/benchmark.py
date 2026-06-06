@@ -99,17 +99,20 @@ def load_likelihood_from_config(config):
     return build_likelihood(config['likelihood']['wrapper'], config['likelihood']['input'])
 
 
-def load_montepython_chains(chain_dir, param_names, thin=1):
+def load_montepython_chains(chain_dir, param_names, thin=1, scales=None):
     chain_files = sorted(Path(chain_dir).glob('*.txt'))
     if not chain_files:
         raise ValueError(f"No chain files found in {chain_dir}")
     
     print(f"Loading {len(chain_files)} MontePython chain files from {chain_dir}")
     samples_list, loglikes_list, n_params = [], [], len(param_names)
+    scales_arr = np.ones(n_params) if scales is None else np.array(scales)
     
     for chain_file in chain_files:
         data = np.atleast_2d(np.loadtxt(chain_file))
         mult, neg_loglkl, params = data[:, 0].astype(int), data[:, 1], data[:, 2:2+n_params]
+        # MontePython stores values in internal (unscaled) units; convert to physical units.
+        params = params * scales_arr
         chain_samples = np.repeat(params, mult, axis=0)[::thin]
         chain_loglikes = -np.repeat(neg_loglkl, mult)[::thin]
         samples_list.append(chain_samples)
@@ -173,7 +176,7 @@ def detect_chain_format(chain_dir):
         return 'montepython'
 
 
-def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='emcee', reference_sampler=None):
+def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None, safe_names=None):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -194,7 +197,7 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         print(f"Gelman-Rubin statistic: {surrogate_GR:.4f}")
         if surrogate_GR > 1.1:
             print("  WARNING: Gelman-Rubin > 1.1, chain may not be converged!")
-        print("\nWARNING: Gelman-Rubin diagnostic is not reliable with the emcee")
+        print("\nWARNING: Gelman-Rubin diagnostic is not reliable with the ensemble")
         print("         ensemble sampler as walkers are not independent chains.")
     except Exception as e:
         print(f"Gelman-Rubin statistic: N/A ({e})")
@@ -334,24 +337,25 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         if getattr(L, "onetail_upper", 0): return f"< {L.upper:.4f}"
         return "N/A"
     
+    lookup_names = safe_names if safe_names is not None else param_names
     if mp_samples:
         mp_stats = mp_samples.getMargeStats()
         print(f"{'Parameter':<20} {'Surr 68%':<22} {'True 68%':<22} {'Surr 95%':<22} {'True 95%':<22}")
         print("-" * 110)
         
-        for pname in param_names:
-            ps = surrogate_stats.parWithName(pname)
-            pt = mp_stats.parWithName(pname)
-            s68, s95 = ps.limits[0] if ps.limits else None, ps.limits[1] if ps.limits else None
-            t68, t95 = pt.limits[0] if pt.limits else None, pt.limits[1] if pt.limits else None
+        for pname, sname in zip(param_names, lookup_names):
+            ps = surrogate_stats.parWithName(sname)
+            pt = mp_stats.parWithName(sname)
+            s68, s95 = ps.limits[0] if ps is not None and ps.limits else None, ps.limits[1] if ps is not None and ps.limits else None
+            t68, t95 = pt.limits[0] if pt is not None and pt.limits else None, pt.limits[1] if pt is not None and pt.limits else None
             print(f"{pname:<20} {fmt(s68):<22} {fmt(t68):<22} {fmt(s95):<22} {fmt(t95):<22}")
     else:
         print(f"{'Parameter':<20} {'68% Interval':<25} {'95% Interval':<25}")
         print("-" * 72)
         
-        for pname in param_names:
-            ps = surrogate_stats.parWithName(pname)
-            s68, s95 = ps.limits[0] if ps.limits else None, ps.limits[1] if ps.limits else None
+        for pname, sname in zip(param_names, lookup_names):
+            ps = surrogate_stats.parWithName(sname)
+            s68, s95 = ps.limits[0] if ps is not None and ps.limits else None, ps.limits[1] if ps is not None and ps.limits else None
             print(f"{pname:<20} {fmt(s68):<25} {fmt(s95):<25}")
     
     print(f"\n=== END DIAGNOSTICS ===")
@@ -449,27 +453,30 @@ def main():
             size=(n_walkers, len(param_names))
         )
         sampler.run(initial_pos=initial_pos, max_steps=args.n_steps, progress=True)
-        chain = sampler.get_chain(discard=burn_in, thin=args.thin).numpy()
-        log_prob = sampler.get_logpost(discard=burn_in, thin=args.thin).numpy()
+        chain = sampler.get_chain(discard=burn_in, thin=args.thin)
+        log_prob = sampler.get_logpost(discard=burn_in, thin=args.thin)
         np.savez(chain_path, chain=chain, log_prob=log_prob)
         print(f"Chain shape: {chain.shape}")
 
+    import re
+    safe_names = [re.sub(r'[\s*?{}^$\\]', '', p) for p in param_names]
     param_labels = [p.replace('_', r'\_') for p in param_names]
-    
-    samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])], 
-                        names=param_names, labels=param_labels,
+    safe_prior_bounds = {s: prior_bounds[o] for s, o in zip(safe_names, param_names)}
+
+    samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])],
+                        names=safe_names, labels=param_labels,
                         loglikes=[-log_prob[:, i] for i in range(log_prob.shape[1])], 
-                        ranges=prior_bounds)
+                        ranges=safe_prior_bounds)
     
     if args.params:
         if len(args.params) == 1 and ',' in args.params[0]:
             param_indices = [int(x) - 1 for x in args.params[0].split(',')]
-            plot_params = [param_names[i] for i in param_indices]
+            plot_params = [safe_names[i] for i in param_indices]
         else:
-            plot_params = args.params
-            param_indices = [param_names.index(p) for p in plot_params]
+            plot_params = [safe_names[param_names.index(p)] for p in args.params]
+            param_indices = [param_names.index(p) for p in args.params]
     else:
-        plot_params, param_indices = param_names, list(range(len(param_names)))
+        plot_params, param_indices = safe_names, list(range(len(param_names)))
     
     mp_samples = None
     chain_format = None
@@ -481,10 +488,11 @@ def main():
             if chain_format == 'cobaya':
                 mp_samples_list, mp_loglikes_list = load_cobaya_chains(args.chains, param_names, thin=1)
             else:
-                mp_samples_list, mp_loglikes_list = load_montepython_chains(args.chains, param_names, thin=1)
+                mp_samples_list, mp_loglikes_list = load_montepython_chains(
+                    args.chains, param_names, thin=1, scales=true_likelihood._scales)
             
-            mp_samples = MCSamples(samples=mp_samples_list, names=param_names, labels=param_labels,
-                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=prior_bounds)
+            mp_samples = MCSamples(samples=mp_samples_list, names=safe_names, labels=param_labels,
+                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=safe_prior_bounds)
             print(f"Loaded {sum(len(s) for s in mp_samples_list)} samples from {chain_format} chains")
         except Exception as e:
             print(f"Warning: Could not load chains: {e}")
@@ -498,8 +506,9 @@ def main():
     log_file_path.parent.mkdir(exist_ok=True), surrogate
     
     with TeeOutput(str(log_file_path)):
-        print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate, 
-                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
+        print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate,
+                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler,
+                         safe_names=safe_names)
     
     g = plots.get_subplot_plotter(width_inch=width_inches)
     g.settings.axes_fontsize = fontsize
@@ -507,8 +516,10 @@ def main():
     g.settings.legend_fontsize = fontsize * 0.9
     g.settings.figure_legend_frame = False
     
+    # Map safe_names -> original param_names for prior_bounds lookup
+    safe_to_orig = dict(zip(safe_names, param_names))
     plot_data = ([mp_samples, samples] if mp_samples else samples)
-    plot_args = {"filled": False, "param_limits": {n: prior_bounds[n] for n in plot_params}}
+    plot_args = ({"filled": False, "param_limits": {n: safe_prior_bounds[n] for n in plot_params}})
     
     if mp_samples:
         plot_args.update({"line_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}],

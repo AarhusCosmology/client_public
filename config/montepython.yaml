@@ -1,6 +1,2 @@
-# config/montepython.yaml
-# Installation-specific MontePython settings.
-# Fill in the paths for your system and do not commit this file to version control.
-
-conf: /path/to/default.conf       # path to your MontePython .conf file
-path: /path/to/montepython/montepython  # path to the MontePython executable/package
+conf: /home/lucajn/repos/client_old/config/default.conf
+path: /home/lucajn/repos/client_old/resources/montepython_public/montepython

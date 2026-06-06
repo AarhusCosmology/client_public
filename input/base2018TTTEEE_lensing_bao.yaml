@@ -24,15 +24,11 @@ training:
   patience: 250
 
 sampling:
-  sampler: emcee
+  sampler: aies
   temperature: 7.0
-  n_walkers: 216
-  max_steps: 100000
-  burn_in: 5000
-  target_ess: 5000
-  tau_stability: 0.05
-  chunk_size: 5000
-  iat_memory_mb: 256
+  n_walkers: 64
+  max_steps: 5000
+  burn_in: 500
 
 convergence:
   metric: marginal_r_minus_one
