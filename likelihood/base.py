@@ -1,7 +1,4 @@
-# likelihood/base.py
-
 from abc import ABC, abstractmethod
-
 
 class BaseLikelihood(ABC):
 
