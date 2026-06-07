@@ -1,15 +1,9 @@
-# config/run.py
-#
-# A single run: the resolved static Config, where it lives on disk, and how it
-# was launched (new vs continuation, start iteration, retrain, iteration count).
-# Built once from the CLI arguments and broadcast to MPI workers as one object.
-
 import shutil
+
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-
 from .config import Config
 
 _SUBDIRS = (
@@ -19,7 +13,6 @@ _SUBDIRS = (
     'training_history',
     'convergence_stats',
 )
-
 
 @dataclass(frozen=True)
 class Run:
@@ -33,12 +26,6 @@ class Run:
 
     @classmethod
     def from_args(cls, args):
-        """Resolve CLI arguments into a Run (a pure value object; no I/O).
-
-        ``input_or_dir`` is either a YAML input file (new run) or an existing
-        run directory (continuation). For new runs, call ``create_directories``
-        afterwards to materialise the run directory on disk.
-        """
         path = Path(args.input_or_dir)
         is_continuation = path.is_dir() and (path / 'training_data').exists()
 
@@ -79,11 +66,6 @@ class Run:
         )
 
     def create_directories(self, source_config):
-        """Create the run directory tree and archive the input config verbatim.
-
-        Called once on the master for new runs; continuations reuse the existing
-        directory and its already-archived config.
-        """
         for name in _SUBDIRS:
             (self.run_dir / name).mkdir(parents=True, exist_ok=True)
         source = Path(source_config)
@@ -115,18 +97,14 @@ class Run:
     # ---- Launch behaviour ----
     @property
     def use_convergence(self):
-        """Stop on the convergence criterion rather than a fixed iteration count."""
         return self.iterations_override is None
 
     @property
     def reuse_initial_model(self):
-        """On a continuation without --retrain, reuse the existing model for the
-        first iteration instead of retraining it."""
         return self.is_continuation and not self.retrain
 
     @property
     def n_iterations(self):
-        """Number of loop iterations to run for this invocation."""
         if self.iterations_override is None:
             return self.config.convergence.max_iterations
         # Continuations get one extra so the reused-model iteration isn't counted.

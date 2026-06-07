@@ -20,8 +20,6 @@ class BaseLikelihood(ABC):
 
     @abstractmethod
     def loglkl(self, x):
-        """Log-likelihood at ``x``, an ordered array of parameter values
-        matching ``get_param_names()``."""
         pass
 
     @abstractmethod
@@ -33,11 +31,7 @@ class BaseLikelihood(ABC):
         pass
 
     def get_param_scales(self):
-        """Per-parameter factors mapping stored-chain units to physical units.
-        Unity by default; wrappers whose sampler stores parameters in rescaled
-        units (e.g. MontePython) override this."""
         return [1.0] * len(self.get_param_names())
-
 
 def build_likelihood(wrapper, input_file):
     if wrapper == 'montepython':

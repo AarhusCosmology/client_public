@@ -1,8 +1,5 @@
-# client.py
-
 import time
 import argparse
-
 import numpy as np
 
 from config.run import Run

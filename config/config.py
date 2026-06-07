@@ -1,14 +1,7 @@
-# config/config.py
-#
-# Static run configuration parsed from the input YAML file. These are the
-# "what to run" settings (science hyperparameters) and contain no runtime or
-# filesystem state -- see run.py for those.
+import yaml
 
 from dataclasses import dataclass
 from pathlib import Path
-
-import yaml
-
 
 @dataclass(frozen=True)
 class LikelihoodConfig:
@@ -22,7 +15,6 @@ class LikelihoodConfig:
             input=str(d['input']),
         )
 
-
 @dataclass(frozen=True)
 class DataConfig:
     n_samples: int
@@ -30,7 +22,7 @@ class DataConfig:
     n_augment: int
     n_neighbors: int
     target_temperature: float
-    pool_factor: int = 20
+    pool_factor: int
 
     @classmethod
     def from_dict(cls, d):
@@ -40,9 +32,8 @@ class DataConfig:
             n_augment=int(d['n_augment']),
             n_neighbors=int(d['n_neighbors']),
             target_temperature=float(d['target_temperature']),
-            pool_factor=int(d.get('pool_factor', 20)),
+            pool_factor=int(d['pool_factor']),
         )
-
 
 @dataclass(frozen=True)
 class ModelConfig:
@@ -57,7 +48,6 @@ class ModelConfig:
             n_neurons=int(d['n_neurons']),
             activation=str(d['activation']),
         )
-
 
 @dataclass(frozen=True)
 class TrainingConfig:
@@ -81,7 +71,6 @@ class TrainingConfig:
             patience=int(d['patience']),
         )
 
-
 @dataclass(frozen=True)
 class SamplingConfig:
     sampler: str
@@ -97,26 +86,24 @@ class SamplingConfig:
             sampler=str(d['sampler']),
             temperature=float(d['temperature']),
             n_walkers=int(d['n_walkers']),
-            n_chains=int(d.get('n_chains', 1)),
+            n_chains=int(d['n_chains']),
             burn_in=int(d['burn_in']),
             max_steps=int(d['max_steps']),
         )
 
-
 @dataclass(frozen=True)
 class ConvergenceConfig:
     threshold: float
-    metric: str = 'marginal_r_minus_one'
-    max_iterations: int = 20
+    metric: str
+    max_iterations: int
 
     @classmethod
     def from_dict(cls, d):
         return cls(
             threshold=float(d['threshold']),
-            metric=str(d.get('metric', 'marginal_r_minus_one')),
-            max_iterations=int(d.get('max_iterations', 20)),
+            metric=str(d['metric']),
+            max_iterations=int(d['max_iterations']),
         )
-
 
 @dataclass(frozen=True)
 class Config:

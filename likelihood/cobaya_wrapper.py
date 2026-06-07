@@ -1,9 +1,7 @@
-# likelihood/cobaya_wrapper.py
-
 import numpy as np
+
 from .base import BaseLikelihood
 from utils.mpi_utils import print_master
-
 
 class CobayaLikelihood(BaseLikelihood):
     def __init__(self, yaml_file):

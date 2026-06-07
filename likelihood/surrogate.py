@@ -9,12 +9,6 @@ import tensorflow as tf
 
 @dataclass(frozen=True)
 class SurrogateMetadata:
-    """Self-describing parameter-space metadata for a run.
-
-    Carries everything needed to reconstruct a SurrogateLikelihood and to
-    interpret stored chains (via ``scales``), so a run can be sampled or
-    benchmarked later without re-initialising the (expensive) true likelihood.
-    """
     param_names: list
     param_labels: list
     bounds: dict          # name -> (lower, upper)
@@ -49,15 +43,6 @@ class SurrogateMetadata:
 
 
 class SurrogateLikelihood:
-    """Likelihood backed by a trained Keras model.
-
-    The interface is TensorFlow-native throughout: every method takes a
-    ``(n, ndim)`` tensor of positions and returns a ``(n,)`` tensor.  Input
-    normalization is baked into the model via a Normalization layer, so no
-    external scalers are required.  Callers that need NumPy should convert at
-    their own boundary with ``.numpy()``.
-    """
-
     def __init__(self, model, metadata):
         self.model = model
         self.metadata = metadata
@@ -79,21 +64,14 @@ class SurrogateLikelihood:
     def get_prior_bounds(self):
         return dict(self._bounds)
 
-    # ------------------------------------------------------------------
-    # TF-native batch interface.  positions: (n, ndim) -> (n,)
-    # ------------------------------------------------------------------
-
     def loglkl(self, positions):
-        """Surrogate log-likelihood for a batch of positions."""
         return tf.squeeze(self.model(positions, training=False), axis=1)
 
     def logprior(self, positions):
-        """Uniform log-prior: 0 inside the bounds, -inf outside."""
         in_bounds = tf.reduce_all((positions >= self._lower) & (positions <= self._upper), axis=1)
         return tf.where(in_bounds, 0.0, -float('inf'))
 
     def logpost(self, positions):
-        """Surrogate log-posterior: loglkl + logprior."""
         return self.loglkl(positions) + self.logprior(positions)
 
 

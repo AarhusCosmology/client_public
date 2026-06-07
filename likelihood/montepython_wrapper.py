@@ -1,11 +1,9 @@
-# likelihood/montepython_wrapper.py
-
 import sys
 import tempfile
 import numpy as np
+
 from .base import BaseLikelihood
 from utils.mpi_utils import print_master
-
 
 class MontePythonLikelihood(BaseLikelihood):
     def __init__(self, input_file):
