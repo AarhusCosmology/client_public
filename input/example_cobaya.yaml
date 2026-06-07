@@ -32,7 +32,7 @@ sampling:
   burn_in: 500
 
 convergence:
-  metric: marginal_r_minus_one
+  metric: gaussian_r_minus_one
   threshold: 0.01 # R-1 threshold
   max_iterations: 20
 
