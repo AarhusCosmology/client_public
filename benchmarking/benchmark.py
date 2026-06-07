@@ -425,6 +425,7 @@ def main():
 
     burn_in = config['sampling']['burn_in']
     n_walkers = config['sampling']['n_walkers']
+    n_chains = config['sampling']['n_chains']
     sampler_name = config['sampling']['sampler']
 
     output_dir = run_dir / 'benchmark_chains'
@@ -442,6 +443,7 @@ def main():
         sampler = build_sampler(
             name=sampler_name,
             n_walkers=n_walkers,
+            n_chains=n_chains,
             ndim=len(param_names),
             logpost_fn=surrogate.logpost,
             bounds=(lower, upper),
