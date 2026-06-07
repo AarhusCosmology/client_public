@@ -1,15 +1,7 @@
-import heapq
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from pathlib import Path
 from sklearn.neighbors import NearestNeighbors
-from scipy.special import gamma, logsumexp
-
-
-def _unit_ball_volume(dim):
-    """Volume of the unit ball in R^dim: V_dim = pi^(dim/2) / Gamma(dim/2 + 1)."""
-    return np.pi ** (dim / 2) / gamma(dim / 2 + 1)
 
 
 class _WhitenedKNN:
@@ -42,59 +34,9 @@ class _WhitenedKNN:
     def kneighbors(self, X):
         return self._nn.kneighbors(self.whiten(X))
 
-
-def _systematic_resample(log_weights, M):
-    """Draw M indices from unnormalised log-weights via systematic resampling.
-
-    Compared with multinomial resampling, systematic resampling achieves the
-    same O(M) cost with variance lower by a factor of M.
-    """
-    log_w = log_weights - logsumexp(log_weights)
-    w = np.exp(log_w)
-    w /= w.sum()  # numerical safety
-    cumsum = np.cumsum(w)
-    cumsum[-1] = 1.0  # clamp to exactly 1
-    u0 = np.random.uniform(0.0, 1.0 / M)
-    positions = u0 + np.arange(M) / M
-    return np.searchsorted(cumsum, positions)
-
-
-def _union_log_rho(nn, accepted_arr, query_white, k):
-    """Log k-NN density at query points against the union of nn and accepted_arr.
-
-    Queries the training-set index for k neighbours and, if any accepted points
-    exist, queries them via brute force. The merged distances are used to find
-    the k-th nearest neighbour in the union. query_white must already be in
-    the same whitened coordinate system as nn.
-
-    Parameters
-    ----------
-    nn : _WhitenedKNN
-    accepted_arr : np.ndarray, shape (A, dim)  (already whitened; A may be 0)
-    query_white : np.ndarray, shape (M, dim)  (already whitened)
-    k : int
-
-    Returns
-    -------
-    log_rho : np.ndarray, shape (M,)
-    """
-    dim = nn.n_features_in_
-    d_train, _ = nn._nn.kneighbors(query_white, n_neighbors=k)  # (M, k)
-
-    A = len(accepted_arr)
-    if A > 0:
-        diff = query_white[:, None, :] - accepted_arr[None, :, :]  # (M, A, dim)
-        d_acc = np.sqrt((diff ** 2).sum(-1))                        # (M, A)
-        if A >= k:
-            d_acc_top = np.partition(d_acc, k - 1, axis=1)[:, :k]
-        else:
-            d_acc_top = d_acc  # fewer than k accepted points; use all
-        all_d = np.concatenate([d_train, d_acc_top], axis=1)
-        r_k = np.partition(all_d, k - 1, axis=1)[:, k - 1]
-    else:
-        r_k = d_train[:, k - 1]
-
-    return np.log(k / (_unit_ball_volume(dim) * r_k ** dim))
+    def kneighbors_white(self, X_white, n_neighbors):
+        """k-NN query for points already expressed in whitened coordinates."""
+        return self._nn.kneighbors(X_white, n_neighbors=n_neighbors)
 
 
 class TrainingDataset:
@@ -121,6 +63,11 @@ class TrainingDataset:
         self.iteration = None
         self._nn = _WhitenedKNN(self.inputs, n_neighbors + 1)
 
+    @property
+    def nn(self):
+        """Whitened k-NN density index over the current training inputs."""
+        return self._nn
+
     def save(self, path):
         df = pd.DataFrame(self.inputs, columns=self.names)
         df['loglkl'] = self.targets[:, 0]
@@ -142,113 +89,6 @@ class TrainingDataset:
         dataset = cls(inputs, targets, likelihood, n_neighbors, target_temperature)
         dataset.iteration = iteration
         return dataset
-
-    def select_candidates(self, chain, logposts, surrogate, n_augment,
-                          sampling_temperature=1.0, pool_factor=20):
-        """Select n_augment candidate points from the MCMC chain for true-likelihood evaluation.
-
-        Draws M = pool_factor * n_augment candidates via importance-weighted
-        systematic resampling from the chain (biasing toward the training target
-        density L^{1/T}), scores each candidate using the surrogate likelihood
-        and the current k-NN density estimate, then runs a lazy min-heap with
-        incremental union-query density updates to select the n_augment candidates
-        that are most under-represented relative to the target density.
-
-        The score of a candidate θ is v(θ) = log ρ(θ) - log L_surr(θ) / T.
-        A low score means the point lies in a region that is sparse relative to
-        the target density — exactly where new training data is most valuable.
-
-        Monotonicity: adding an accepted point can only increase the local density
-        of nearby candidates (more neighbours → smaller r_k → higher ρ → higher
-        score). Heap entries therefore never become erroneously low, only
-        stale-high, which makes the lazy recomputation scheme correct.
-
-        Parameters
-        ----------
-        chain : array, shape (S, ndim)
-            Flat MCMC chain with burn-in discarded.
-        logposts : array, shape (S,)
-            Log-posterior values stored by the sampler: log_L(θ_i) / T_MC
-            (uniform prior absorbed).
-        surrogate : SurrogateLikelihood
-        n_augment : int
-            Number of candidates to select.
-        sampling_temperature : float
-            Temperature T_MC at which the chain was sampled.
-        pool_factor : int
-            Pool size multiplier: M = pool_factor * n_augment. Default 20.
-
-        Returns
-        -------
-        selected : np.ndarray, shape (n_selected, ndim)
-            Selected candidate points ready for true-likelihood evaluation.
-            n_selected <= n_augment (may be less if the pool is exhausted).
-        """
-        chain = np.asarray(chain, dtype=np.float32)
-        logposts = np.asarray(logposts, dtype=np.float64)
-        S = len(chain)
-        M = min(pool_factor * n_augment, S)
-
-        # IS resampling: draw M candidates biased toward the training target
-        # density q ∝ L^{1/T} by reweighting the chain from q_MC ∝ L^{1/T_MC}.
-        # logposts_i = log_L_i / T_MC, so
-        #   log w_i = log_L_i * (1/T - 1/T_MC) = logposts_i * (T_MC/T - 1) * (-1)
-        # which simplifies to (T_MC/T - 1) * logposts_i (= 0 when T == T_MC).
-        log_weights = (sampling_temperature / self.target_temperature - 1.0) * logposts
-        pool_idx = _systematic_resample(log_weights, M)
-        candidates = chain[pool_idx]
-        print(f"Augmentation: pool of {M} candidates (pool_factor={pool_factor}, "
-              f"chain length={S})")
-
-        candidates_white = self._nn.whiten(candidates)
-        k = self.n_neighbors
-        dim = candidates_white.shape[1]
-        ball_vol = _unit_ball_volume(dim)
-
-        # Precompute training-set k-NN distances once for all M candidates (M, k).
-        # This eliminates repeated sklearn queries inside the heap loop.
-        d_train_all, _ = self._nn._nn.kneighbors(candidates_white, n_neighbors=k)
-
-        # Per-candidate top-k distances to accepted points, maintained incrementally.
-        # Initialised to inf so that training-set distances dominate until points are accepted.
-        d_acc_topk = np.full((M, k), np.inf, dtype=np.float64)
-
-        log_L_surrs = surrogate.loglkl(tf.constant(candidates, dtype=tf.float32)).numpy().astype(np.float64)
-
-        # Initial bulk scoring (no accepted points yet → d_acc_topk all inf).
-        r_k_init = d_train_all[:, k - 1]
-        log_rhos_init = np.log(k / (ball_vol * r_k_init ** dim))
-        init_scores = log_rhos_init - log_L_surrs / self.target_temperature
-
-        # Build a lazy min-heap of (score, candidate_index).
-        heap = [(float(s), i) for i, s in enumerate(init_scores)]
-        heapq.heapify(heap)
-
-        selected_indices = []
-
-        while heap and len(selected_indices) < n_augment:
-            stored_score, i = heapq.heappop(heap)
-
-            # Recompute score using precomputed training distances and the
-            # incrementally maintained accepted-point distances.
-            merged_i = np.concatenate([d_train_all[i:i+1], d_acc_topk[i:i+1]], axis=1)
-            r_k = np.partition(merged_i, k - 1, axis=1)[0, k - 1]
-            new_score = np.log(k / (ball_vol * r_k ** dim)) - log_L_surrs[i] / self.target_temperature
-
-            if new_score > stored_score + 1e-10:
-                # Score increased: the entry was stale. Push back with updated score.
-                heapq.heappush(heap, (float(new_score), i))
-                continue
-
-            # True minimum found — record candidate and update density incrementally.
-            selected_indices.append(i)
-
-            d_new = np.sqrt(((candidates_white - candidates_white[i]) ** 2).sum(-1, keepdims=True))
-            combined = np.concatenate([d_acc_topk, d_new], axis=1)  # (M, k+1)
-            d_acc_topk[:] = np.partition(combined, k - 1, axis=1)[:, :k]
-
-        print(f"  Selected {len(selected_indices)}/{n_augment} candidates for likelihood evaluation")
-        return candidates[selected_indices]
 
     def add_evaluated_points(self, candidates, log_L_values):
         """Append true-likelihood-evaluated points to the dataset.

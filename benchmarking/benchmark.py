@@ -17,7 +17,7 @@ from datetime import datetime
 from getdist import MCSamples, plots
 from matplotlib.lines import Line2D
 from scipy import stats
-from likelihood.surrogate import SurrogateLikelihood
+from likelihood.surrogate import SurrogateLikelihood, SurrogateMetadata
 from model.network import load_model
 from sampling.sampler import build_sampler
 
@@ -92,11 +92,6 @@ def compute_kl_divergence_kde(samples_p, samples_q, param_indices=None, max_samp
         per_param_kl[i] = max(0.0, np.trapezoid(integrand, x_grid))
     
     return sum(per_param_kl.values()), per_param_kl
-
-
-def load_likelihood_from_config(config):
-    from likelihood.base import build_likelihood
-    return build_likelihood(config['likelihood']['wrapper'], config['likelihood']['input'])
 
 
 def load_montepython_chains(chain_dir, param_names, thin=1, scales=None):
@@ -176,7 +171,7 @@ def detect_chain_format(chain_dir):
         return 'montepython'
 
 
-def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None, safe_names=None):
+def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -337,7 +332,7 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         if getattr(L, "onetail_upper", 0): return f"< {L.upper:.4f}"
         return "N/A"
     
-    lookup_names = safe_names if safe_names is not None else param_names
+    lookup_names = param_names
     if mp_samples:
         mp_stats = mp_samples.getMargeStats()
         print(f"{'Parameter':<20} {'Surr 68%':<22} {'True 68%':<22} {'Surr 95%':<22} {'True 95%':<22}")
@@ -412,11 +407,14 @@ def main():
         print(f"Auto-detected latest iteration: {iteration}")
     else:
         iteration = args.iteration
-    true_likelihood = load_likelihood_from_config(config)
-    param_names = true_likelihood.get_param_names()
+    metadata = SurrogateMetadata.load(run_dir / 'metadata.json')
 
-    true_likelihood.restrict_prior_bounds(n_sigma=config['data']['n_sigma'])
-    prior_bounds = true_likelihood.get_prior_bounds()
+    model = load_model(run_dir / f"trained_models/trained_model_it_{iteration}.keras")
+    surrogate = SurrogateLikelihood(model, metadata)
+    scales = metadata.scales
+
+    param_names = surrogate.get_param_names()
+    prior_bounds = surrogate.get_prior_bounds()
 
     x_all = None
     if not args.no_training_data:
@@ -425,11 +423,9 @@ def main():
             df = pd.read_csv(data_path)
             x_all = df[param_names].to_numpy()
 
-    model = load_model(run_dir / f"trained_models/trained_model_it_{iteration}.keras")
-    surrogate = SurrogateLikelihood(true_likelihood, model)
-
     burn_in = config['sampling']['burn_in']
     n_walkers = config['sampling']['n_walkers']
+    sampler_name = config['sampling']['sampler']
 
     output_dir = run_dir / 'benchmark_chains'
     output_dir.mkdir(exist_ok=True)
@@ -440,43 +436,43 @@ def main():
         chain, log_prob = data['chain'], data['log_prob']
         print(f"Loaded chain: {chain.shape}")
     else:
-        print(f"Running ensemble sampler: {n_walkers} walkers, {burn_in} burn-in, {args.n_steps} steps")
+        print(f"Running {sampler_name} sampler: {n_walkers} walkers, {burn_in} burn-in, {args.n_steps} steps")
+        lower = [b[0] for b in prior_bounds.values()]
+        upper = [b[1] for b in prior_bounds.values()]
         sampler = build_sampler(
-            name='ensemble',
+            name=sampler_name,
             n_walkers=n_walkers,
             ndim=len(param_names),
             logpost_fn=surrogate.logpost,
+            bounds=(lower, upper),
         )
         initial_pos = np.random.uniform(
-            low=[b[0] for b in prior_bounds.values()],
-            high=[b[1] for b in prior_bounds.values()],
+            low=lower,
+            high=upper,
             size=(n_walkers, len(param_names))
         )
-        sampler.run(initial_pos=initial_pos, max_steps=args.n_steps, progress=True)
+        sampler.run(initial_pos=initial_pos, max_steps=args.n_steps)
         chain = sampler.get_chain(discard=burn_in, thin=args.thin)
         log_prob = sampler.get_logpost(discard=burn_in, thin=args.thin)
         np.savez(chain_path, chain=chain, log_prob=log_prob)
         print(f"Chain shape: {chain.shape}")
 
-    import re
-    safe_names = [re.sub(r'[\s*?{}^$\\]', '', p) for p in param_names]
-    param_labels = [p.replace('_', r'\_') for p in param_names]
-    safe_prior_bounds = {s: prior_bounds[o] for s, o in zip(safe_names, param_names)}
+    param_labels = surrogate.get_param_labels()
 
     samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])],
-                        names=safe_names, labels=param_labels,
+                        names=param_names, labels=param_labels,
                         loglikes=[-log_prob[:, i] for i in range(log_prob.shape[1])], 
-                        ranges=safe_prior_bounds)
+                        ranges=prior_bounds)
     
     if args.params:
         if len(args.params) == 1 and ',' in args.params[0]:
             param_indices = [int(x) - 1 for x in args.params[0].split(',')]
-            plot_params = [safe_names[i] for i in param_indices]
+            plot_params = [param_names[i] for i in param_indices]
         else:
-            plot_params = [safe_names[param_names.index(p)] for p in args.params]
+            plot_params = args.params
             param_indices = [param_names.index(p) for p in args.params]
     else:
-        plot_params, param_indices = safe_names, list(range(len(param_names)))
+        plot_params, param_indices = param_names, list(range(len(param_names)))
     
     mp_samples = None
     chain_format = None
@@ -489,10 +485,10 @@ def main():
                 mp_samples_list, mp_loglikes_list = load_cobaya_chains(args.chains, param_names, thin=1)
             else:
                 mp_samples_list, mp_loglikes_list = load_montepython_chains(
-                    args.chains, param_names, thin=1, scales=true_likelihood._scales)
+                    args.chains, param_names, thin=1, scales=scales)
             
-            mp_samples = MCSamples(samples=mp_samples_list, names=safe_names, labels=param_labels,
-                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=safe_prior_bounds)
+            mp_samples = MCSamples(samples=mp_samples_list, names=param_names, labels=param_labels,
+                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=prior_bounds)
             print(f"Loaded {sum(len(s) for s in mp_samples_list)} samples from {chain_format} chains")
         except Exception as e:
             print(f"Warning: Could not load chains: {e}")
@@ -507,8 +503,7 @@ def main():
     
     with TeeOutput(str(log_file_path)):
         print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate,
-                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler,
-                         safe_names=safe_names)
+                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
     
     g = plots.get_subplot_plotter(width_inch=width_inches)
     g.settings.axes_fontsize = fontsize
@@ -516,10 +511,8 @@ def main():
     g.settings.legend_fontsize = fontsize * 0.9
     g.settings.figure_legend_frame = False
     
-    # Map safe_names -> original param_names for prior_bounds lookup
-    safe_to_orig = dict(zip(safe_names, param_names))
     plot_data = ([mp_samples, samples] if mp_samples else samples)
-    plot_args = ({"filled": False, "param_limits": {n: safe_prior_bounds[n] for n in plot_params}})
+    plot_args = ({"filled": False, "param_limits": {n: prior_bounds[n] for n in plot_params}})
     
     if mp_samples:
         plot_args.update({"line_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}],
@@ -531,11 +524,16 @@ def main():
     g.triangle_plot(plot_data, plot_params, **plot_args)
     
     if x_all is not None:
+        # Keep dot size a fixed fraction of panel width regardless of n_params.
+        # s is in points²; panel_pts ≈ figure_width_pts / n_plot, so s ∝ 1/n_plot².
+        n_plot = len(plot_params)
+        panel_pts = width_inches * 72 / n_plot
+        s = (0.01 * panel_pts) ** 2  # dot radius ≈ 0.25% of panel width
         for j in range(1, len(plot_params)):
             for i in range(j):
                 if ax := g.get_axes_for_params(plot_params[i], plot_params[j]):
-                    ax.scatter(x_all[:, param_indices[i]], x_all[:, param_indices[j]], 
-                              s=0.3, alpha=0.15, color='black', zorder=1, edgecolors='none', rasterized=True)
+                    ax.scatter(x_all[:, param_indices[i]], x_all[:, param_indices[j]],
+                              s=s, alpha=0.15, color='black', zorder=1, edgecolors='none', rasterized=True)
     
     [legend.remove() for legend in g.fig.legends]
     

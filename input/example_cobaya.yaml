@@ -27,6 +27,7 @@ sampling:
   sampler: aies
   temperature: 7.0 # MCMC sampling temperature
   n_walkers: 16
+  n_chains: 1
   max_steps: 10000
   burn_in: 500
 

@@ -1,18 +1,16 @@
 # metrics/convergence.py
 
 from abc import ABC, abstractmethod
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 
 class BaseConvergenceMetric(ABC):
     @abstractmethod
     def summarise(self, chain):
         """chain: (n_samples, ndim) flat array. Returns a summary dict."""
-        pass
-
-    @abstractmethod
-    def compute(self, current, previous):
-        """Compute metric directly from two flat chains."""
         pass
 
     @abstractmethod
@@ -25,11 +23,6 @@ class MarginalRMinusOne(BaseConvergenceMetric):
     def summarise(self, chain):
         chain = np.asarray(chain)
         return {'mean': chain.mean(axis=0), 'std': chain.std(axis=0)}
-
-    def compute(self, current, previous):
-        current, previous = np.asarray(current), np.asarray(previous)
-        return self._metric(current.mean(axis=0), current.std(axis=0),
-                            previous.mean(axis=0), previous.std(axis=0))
 
     def compute_from_summary(self, chain, prev_summary):
         chain = np.asarray(chain)
@@ -48,3 +41,18 @@ def build_convergence_metric(name):
     if name not in registry:
         raise ValueError(f"Unknown convergence metric: '{name}'. Available: {list(registry)}")
     return registry[name]()
+
+
+def save_chain_summary(convergence_stats_dir, iteration, summary):
+    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.csv'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({'mean': summary['mean'], 'std': summary['std']}).to_csv(path, index=False)
+    return path
+
+
+def load_chain_summary(convergence_stats_dir, iteration):
+    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.csv'
+    if not path.exists():
+        return None
+    df = pd.read_csv(path)
+    return {'mean': df['mean'].to_numpy(), 'std': df['std'].to_numpy()}, path

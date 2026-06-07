@@ -2,11 +2,12 @@
 
 import numpy as np
 from .base import BaseLikelihood
+from utils.mpi_utils import print_master
 
 
 class CobayaLikelihood(BaseLikelihood):
     def __init__(self, yaml_file):
-        print(f"Loading Cobaya likelihood from '{yaml_file}'...")
+        print_master(f"Loading Cobaya likelihood from '{yaml_file}'...")
         from cobaya.yaml import yaml_load_file
         from cobaya.model import get_model
         self.yaml_file = yaml_file
@@ -15,11 +16,7 @@ class CobayaLikelihood(BaseLikelihood):
         self._param_names = self._get_varying_params()
         self._raw_bounds = self._compute_bounds()
         self._effective_bounds = None
-        print(f"Cobaya: found {len(self._param_names)} parameters: {', '.join(self._param_names)}")
-
-    @property
-    def varying_param_names(self):
-        return self._param_names
+        print_master(f"Cobaya: found {len(self._param_names)} parameters: {', '.join(self._param_names)}")
 
     def get_param_names(self):
         return self._param_names
@@ -39,6 +36,12 @@ class CobayaLikelihood(BaseLikelihood):
             bounds[name] = (lower, upper)
         return bounds
 
+    def get_param_labels(self):
+        return [
+            self.cobaya_info['params'][p].get('latex', p).replace('$', '')
+            for p in self._param_names
+        ]
+
     def get_prior_bounds(self):
         return dict(self._effective_bounds if self._effective_bounds is not None else self._raw_bounds)
 
@@ -53,24 +56,23 @@ class CobayaLikelihood(BaseLikelihood):
             new_upper = min(upper_orig, fid + n_sigma * sigma) if upper_orig is not None else fid + n_sigma * sigma
             restricted_bounds[name] = (new_lower, new_upper)
         self._effective_bounds = restricted_bounds
-        print(f"Prior bounds restricted to \u00b1{n_sigma}\u03c3 around fiducial values")
+        print_master(f"Prior bounds restricted to \u00b1{n_sigma}\u03c3 around fiducial values")
 
-    def restore_prior_bounds(self):
-        self._effective_bounds = None
-
-    def loglkl(self, position):
+    def loglkl(self, x):
+        position = {name: float(x[j]) for j, name in enumerate(self._param_names)}
         result = self.cobaya_model.logposterior(position, return_derived=False)
         return float(result.logpost)
 
-    def logprior(self, position):
+    def logprior(self, x):
         bounds = self.get_prior_bounds()
-        for name, (lower, upper) in bounds.items():
-            if (lower is not None and position[name] < lower) or (upper is not None and position[name] > upper):
+        for j, name in enumerate(self._param_names):
+            lower, upper = bounds[name]
+            if (lower is not None and x[j] < lower) or (upper is not None and x[j] > upper):
                 return -np.inf
         return 0.0
 
-    def logpost(self, position):
-        return self.loglkl(position) + self.logprior(position)
+    def logpost(self, x):
+        return self.loglkl(x) + self.logprior(x)
 
     def __del__(self):
         if hasattr(self, 'cobaya_model'):

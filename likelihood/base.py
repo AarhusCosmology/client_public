@@ -3,16 +3,40 @@ from abc import ABC, abstractmethod
 class BaseLikelihood(ABC):
 
     @abstractmethod
-    def loglkl(self, position):
+    def get_param_names(self):
         pass
 
     @abstractmethod
-    def logprior(self, position):
+    def get_param_labels(self):
         pass
 
     @abstractmethod
-    def logpost(self, position):
+    def get_prior_bounds(self):
         pass
+
+    @abstractmethod
+    def restrict_prior_bounds(self, n_sigma):
+        pass
+
+    @abstractmethod
+    def loglkl(self, x):
+        """Log-likelihood at ``x``, an ordered array of parameter values
+        matching ``get_param_names()``."""
+        pass
+
+    @abstractmethod
+    def logprior(self, x):
+        pass
+
+    @abstractmethod
+    def logpost(self, x):
+        pass
+
+    def get_param_scales(self):
+        """Per-parameter factors mapping stored-chain units to physical units.
+        Unity by default; wrappers whose sampler stores parameters in rescaled
+        units (e.g. MontePython) override this."""
+        return [1.0] * len(self.get_param_names())
 
 
 def build_likelihood(wrapper, input_file):

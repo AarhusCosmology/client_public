@@ -5,18 +5,6 @@ import tensorflow as tf
 from keras.callbacks import EarlyStopping
 
 
-def save_training_data(x, y, path):
-    with h5py.File(path, 'w') as f:
-        data = f.create_group('data')
-        data.create_dataset('x', data=x, dtype='f8')
-        data.create_dataset('y', data=y, dtype='f8')
-
-
-def load_training_data(path):
-    with h5py.File(path, 'r') as f:
-        return f['data']['x'][...], f['data']['y'][...]
-
-
 def save_history(history, path):
     pd.DataFrame(history).to_csv(path, index=False)
 

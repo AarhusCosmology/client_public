@@ -185,32 +185,17 @@ if prompt_yes_no "Add 'conda activate ${ENV_NAME}' to your .bashrc?" "n"; then
     add_to_bashrc "conda activate ${ENV_NAME}" "Auto-activate CLiENT conda environment"
 fi
 
-# ========================================
-# 2. best-inference Setup
-# ========================================
-print_section "Step 2: best-inference (~5 MB)"
-
+# Install best-inference (local editable install until upstream merge)
 BEST_INFERENCE_PATH="${RESOURCES_DIR}/best_inference"
-BEST_INFERENCE_INSTALLED=false
-
-if [ -d "$BEST_INFERENCE_PATH" ] && [ -f "$BEST_INFERENCE_PATH/pyproject.toml" ]; then
-    print_info "best-inference already found at: ${BEST_INFERENCE_PATH}"
-    BEST_INFERENCE_INSTALLED=true
-    if prompt_yes_no "Do you want to reinstall best-inference?" "n"; then
-        pip install -e "$BEST_INFERENCE_PATH" && print_success "best-inference reinstalled!"
-    fi
-elif prompt_yes_no "Do you want to install best-inference (surrogate sampler backend)?" "y"; then
-    print_info "Cloning best-inference into ${BEST_INFERENCE_PATH}..."
+if [ ! -d "$BEST_INFERENCE_PATH" ]; then
     git clone https://github.com/LucaJanken/best-inference.git "$BEST_INFERENCE_PATH"
-    pip install -e "$BEST_INFERENCE_PATH" && print_success "best-inference installed!" && BEST_INFERENCE_INSTALLED=true
-else
-    print_info "Skipping best-inference setup."
 fi
+pip install -q -e "$BEST_INFERENCE_PATH"
 
 # ========================================
-# 3. CLASS Setup
+# 2. CLASS Setup
 # ========================================
-print_section "Step 3: CLASS (~1 GB)"
+print_section "Step 2: CLASS (~1 GB)"
 
 CLASS_PATH=""
 CLASS_INSTALLED=false
@@ -242,9 +227,9 @@ else
 fi
 
 # ========================================
-# 4. MontePython Setup
+# 3. MontePython Setup
 # ========================================
-print_section "Step 4: MontePython (~1 GB, Optional)"
+print_section "Step 3: MontePython (~1 GB, Optional)"
 
 MONTEPYTHON_PATH=""
 
@@ -264,9 +249,9 @@ else
 fi
 
 # ========================================
-# 5. Planck Likelihood Setup (for MontePython)
+# 4. Planck Likelihood Setup (for MontePython)
 # ========================================
-print_section "Step 5: Planck Likelihood (~200 MB, for MontePython)"
+print_section "Step 4: Planck Likelihood (~200 MB, for MontePython)"
 
 CLIK_PATH=""
 
@@ -357,9 +342,9 @@ else
 fi
 
 # ========================================
-# 6. Cobaya Setup
+# 5. Cobaya Setup
 # ========================================
-print_section "Step 6: Cobaya (~5 MB, Optional)"
+print_section "Step 5: Cobaya (~5 MB, Optional)"
 
 COBAYA_INSTALLED=false
 
@@ -376,9 +361,9 @@ fi
 [ "$COBAYA_INSTALLED" = true ] && print_info "Install likelihoods with: cobaya-install <likelihood_name>"
 
 # ========================================
-# 7. MPI Support (mpi4py)
+# 6. MPI Support (mpi4py)
 # ========================================
-print_section "Step 7: MPI Support (Optional)"
+print_section "Step 6: MPI Support (Optional)"
 
 MPI_INSTALLED=false
 
@@ -407,9 +392,9 @@ else
 fi
 
 # ========================================
-# 8. Configuration File Generation
+# 7. Configuration File Generation
 # ========================================
-print_section "Step 8: Configuration"
+print_section "Step 7: Configuration"
 
 
 if [ -n "$MONTEPYTHON_PATH" ]; then
@@ -444,7 +429,6 @@ echo "Summary of installed components:"
 echo ""
 
 echo -e "  ${GREEN}✓${NC} Conda Environment: ${ENV_NAME}"
-[ "$BEST_INFERENCE_INSTALLED" = true ] && echo -e "  ${GREEN}✓${NC} best-inference: ${BEST_INFERENCE_PATH}" || echo -e "  ${YELLOW}○${NC} best-inference: Not installed"
 [ -n "$CLASS_PATH" ] && echo -e "  ${GREEN}✓${NC} CLASS: ${CLASS_PATH}" || echo -e "  ${YELLOW}○${NC} CLASS: Not configured"
 [ -n "$MONTEPYTHON_PATH" ] && echo -e "  ${GREEN}✓${NC} MontePython: ${MONTEPYTHON_PATH}" || echo -e "  ${YELLOW}○${NC} MontePython: Not configured"
 [ -n "$CLIK_PATH" ] && echo -e "  ${GREEN}✓${NC} Planck Likelihood: ${CLIK_PATH}" || echo -e "  ${YELLOW}○${NC} Planck Likelihood: Not configured"

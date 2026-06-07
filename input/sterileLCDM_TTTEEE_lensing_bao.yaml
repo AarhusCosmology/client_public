@@ -27,6 +27,7 @@ sampling:
   sampler: aies
   temperature: 7.0
   n_walkers: 64
+  n_chains: 1
   max_steps: 5000
   burn_in: 500
 

@@ -1,11 +1,12 @@
 likelihood:
   wrapper: montepython
-  input: input/montepython/base2018TTTEEE_lensing_bao.param
+  input: input/montepython/test_gaussian.param
 
 data:
-  n_samples: 5000
+  n_samples: 500
   n_sigma: 10.0
-  n_augment: 2500
+  n_augment: 500
+  pool_factor: 20
   n_neighbors: 20
   target_temperature: 7.0
 
@@ -15,7 +16,7 @@ model:
   activation: alsing
 
 training:
-  n_epochs: 5000
+  n_epochs: 500
   batch_size: 128
   loss: msre
   kappa_sigma: 3
@@ -28,11 +29,10 @@ sampling:
   temperature: 7.0
   n_walkers: 64
   n_chains: 1
-  max_steps: 5000
-  burn_in: 500
+  max_steps: 100000
+  burn_in: 5000
 
 convergence:
   metric: marginal_r_minus_one
   threshold: 0.01
   max_iterations: 20
-    

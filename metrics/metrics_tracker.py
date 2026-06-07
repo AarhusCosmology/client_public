@@ -1,8 +1,9 @@
 # metrics/metrics_tracker.py
 
+import json
 from pathlib import Path
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime
 
 @dataclass
@@ -19,8 +20,6 @@ class SamplingMetrics:
     steps_per_walker: int
     acceptance_rate: float
     sampling_time: float
-    final_max_tau: Optional[float] = None
-    converged: bool = True
     
 @dataclass 
 class ResamplingMetrics:
@@ -47,6 +46,7 @@ class MetricsTracker:
     def __init__(self, results_dir: str, start_iteration: int = 0):
         self.results_dir = Path(results_dir)
         self.metrics_file = self.results_dir / "metrics.log"
+        self.metrics_json = self.results_dir / "metrics.json"
         self.start_iteration = start_iteration
         self.training_metrics = []
         self.sampling_metrics = []
@@ -54,7 +54,7 @@ class MetricsTracker:
         self.iteration_metrics = []
         self.convergence_metrics = {}
         
-        if start_iteration > 0 and self.metrics_file.exists():
+        if start_iteration > 0 and self.metrics_json.exists():
             self._load_existing_metrics(start_iteration)
     
     def add_training_metrics(self, iteration: int, epochs_trained: int, 
@@ -65,11 +65,9 @@ class MetricsTracker:
         ))
     
     def add_sampling_metrics(self, iteration: int, steps_per_walker: int,
-                           acceptance_rate: float, sampling_time: float,
-                           final_max_tau: Optional[float] = None,
-                           converged: bool = True) -> None:
+                           acceptance_rate: float, sampling_time: float) -> None:
         self.sampling_metrics.append(SamplingMetrics(
-            iteration, steps_per_walker, acceptance_rate, sampling_time, final_max_tau, converged
+            iteration, steps_per_walker, acceptance_rate, sampling_time
         ))
     
     def add_resampling_metrics(self, iteration: int, pool_size: int,
@@ -94,7 +92,7 @@ class MetricsTracker:
             'converged': bool(converged)
         }
     
-    def save_all_metrics(self, suffix: str = None) -> None:
+    def save_all_metrics(self) -> None:
         self._save_comprehensive_metrics()
     
     def save_progress_metrics(self, iteration: int) -> None:
@@ -131,21 +129,18 @@ class MetricsTracker:
             return
         
         f.write("Sampling Metrics:\n")
-        f.write("-" * 58 + "\n")
-        f.write(f"{'it':<3} | {'steps/w':<7} | {'ar':<6} | {'max(τ)':<9} | {'converged':<9} | {'time':<6}\n")
-        f.write("-" * 58 + "\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'it':<3} | {'steps/w':<7} | {'ar':<6} | {'time':<6}\n")
+        f.write("-" * 40 + "\n")
         
         for m in self.sampling_metrics:
-            tau_str = f"{m.final_max_tau:.2f}" if m.final_max_tau is not None else "N/A"
-            converged_str = "True" if m.converged else "False"
-            f.write(f"{m.iteration:<3} | {m.steps_per_walker:<7} | {m.acceptance_rate:<6.3f} | {tau_str:<9} | {converged_str:<9} | {m.sampling_time/60:<6.2f}\n")
+            f.write(f"{m.iteration:<3} | {m.steps_per_walker:<7} | {m.acceptance_rate:<6.3f} | {m.sampling_time/60:<6.2f}\n")
         
-        f.write("-" * 58 + "\n")
+        f.write("-" * 40 + "\n")
         avg_steps = sum(m.steps_per_walker for m in self.sampling_metrics) / len(self.sampling_metrics)
         avg_ar = sum(m.acceptance_rate for m in self.sampling_metrics) / len(self.sampling_metrics)
-        avg_tau = sum(m.final_max_tau for m in self.sampling_metrics if m.final_max_tau is not None) / len([m for m in self.sampling_metrics if m.final_max_tau is not None]) if any(m.final_max_tau is not None for m in self.sampling_metrics) else 0
         avg_time = sum(m.sampling_time for m in self.sampling_metrics) / len(self.sampling_metrics)
-        f.write(f"{'avg':<3} | {avg_steps:<7.0f} | {avg_ar:<6.3f} | {avg_tau:<9.2f} | {'-':<9} | {avg_time/60:<6.2f}\n")
+        f.write(f"{'avg':<3} | {avg_steps:<7.0f} | {avg_ar:<6.3f} | {avg_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_resampling_metrics(self, f):
@@ -208,6 +203,9 @@ class MetricsTracker:
         f.write("\n\n")
     
     def _save_comprehensive_metrics(self) -> None:
+        # metrics.json is the structured source of truth (reloaded on continuation);
+        # metrics.log is a derived, write-only human-readable view.
+        self._save_json()
         with open(self.metrics_file, 'w') as f:
             self._write_header(f)
             self._write_training_metrics(f)
@@ -215,88 +213,42 @@ class MetricsTracker:
             self._write_resampling_metrics(f)
             self._write_convergence_metrics(f)
             self._write_iteration_metrics(f)
+
+    def _save_json(self) -> None:
+        data = {
+            'training': [asdict(m) for m in self.training_metrics],
+            'sampling': [asdict(m) for m in self.sampling_metrics],
+            'resampling': [asdict(m) for m in self.resampling_metrics],
+            'iteration': [
+                {'iteration': m.iteration, 'total_iteration_time': m.total_iteration_time}
+                for m in self.iteration_metrics
+            ],
+            'convergence': {str(it): v for it, v in self.convergence_metrics.items()},
+        }
+        with open(self.metrics_json, 'w') as f:
+            json.dump(data, f, indent=2)
     
     def _load_existing_metrics(self, start_iteration: int) -> None:
-        import re
-        
-        with open(self.metrics_file, 'r') as f:
-            content = f.read()
-        
-        def parse_training_section(content):
-            match = re.search(r'Training Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
-            if not match:
-                return []
-            metrics = []
-            for line in match.group(1).strip().split('\n'):
-                parts = [p.strip() for p in line.split('|')]
-                if parts[0] == 'avg':
-                    continue
-                it, epochs, loss, val_loss, time = int(parts[0]), int(parts[1]), float(parts[2]), float(parts[3]), float(parts[4])*60
-                if it <= start_iteration:
-                    metrics.append(TrainingMetrics(it, epochs, loss, val_loss, time))
-            return metrics
-        
-        def parse_sampling_section(content):
-            match = re.search(r'Sampling Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
-            if not match:
-                return []
-            metrics = []
-            for line in match.group(1).strip().split('\n'):
-                parts = [p.strip() for p in line.split('|')]
-                if parts[0] == 'avg':
-                    continue
-                it, steps, ar = int(parts[0]), int(parts[1]), float(parts[2])
-                tau_str = parts[3]
-                tau = float(tau_str) if tau_str != 'N/A' else None
-                converged = parts[4] == 'True'
-                time = float(parts[5])*60
-                if it < start_iteration:
-                    metrics.append(SamplingMetrics(it, steps, ar, time, tau, converged))
-            return metrics
-        
-        def parse_resampling_section(content):
-            match = re.search(r'Resampling Metrics:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
-            if not match:
-                return []
-            metrics = []
-            for line in match.group(1).strip().split('\n'):
-                parts = [p.strip() for p in line.split('|')]
-                if parts[0] == 'tot':
-                    continue
-                it, pool, sent, added = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
-                time = float(parts[5])*60
-                if it < start_iteration:
-                    metrics.append(ResamplingMetrics(it, pool, sent, added, time))
-            return metrics
-        
-        def parse_convergence_section(content):
-            match = re.search(r'Convergence Metrics.*?\n-+\nit.*?\n-+\n(.*?)(?:\n\n|$)', content, re.DOTALL)
-            if not match:
-                return {}
-            metrics = {}
-            for line in match.group(1).strip().split('\n'):
-                parts = [p.strip() for p in line.split('|')]
-                it = int(parts[0])
-                if it < start_iteration:
-                    metrics[it] = {'r_minus_one': float(parts[1]), 'converged': parts[2] == 'True'}
-            return metrics
-        
-        def parse_iteration_section(content):
-            match = re.search(r'Per-Iteration Runtime:\n-+\nit.*?\n-+\n(.*?)\n-+', content, re.DOTALL)
-            if not match:
-                return []
-            metrics = []
-            for line in match.group(1).strip().split('\n'):
-                parts = [p.strip() for p in line.split('|')]
-                if parts[0] == 'tot':
-                    continue
-                it, total = int(parts[0]), float(parts[1])*60
-                if it < start_iteration:
-                    metrics.append(IterationMetrics(it, total))
-            return metrics
-        
-        self.training_metrics = parse_training_section(content)
-        self.sampling_metrics = parse_sampling_section(content)
-        self.resampling_metrics = parse_resampling_section(content)
-        self.convergence_metrics = parse_convergence_section(content)
-        self.iteration_metrics = parse_iteration_section(content)
+        with open(self.metrics_json, 'r') as f:
+            data = json.load(f)
+
+        self.training_metrics = [
+            TrainingMetrics(**m) for m in data['training']
+            if m['iteration'] <= start_iteration
+        ]
+        self.sampling_metrics = [
+            SamplingMetrics(**m) for m in data['sampling']
+            if m['iteration'] < start_iteration
+        ]
+        self.resampling_metrics = [
+            ResamplingMetrics(**m) for m in data['resampling']
+            if m['iteration'] < start_iteration
+        ]
+        self.iteration_metrics = [
+            IterationMetrics(**m) for m in data['iteration']
+            if m['iteration'] < start_iteration
+        ]
+        self.convergence_metrics = {
+            int(it): v for it, v in data['convergence'].items()
+            if int(it) < start_iteration
+        }

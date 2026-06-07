@@ -22,7 +22,7 @@ def _check_mpi():
             from mpi4py import MPI
             _MPI_MODULE = MPI
             _MPI_AVAILABLE = MPI.COMM_WORLD.Get_size() > 1
-        except (ImportError, Exception) as e:
+        except ImportError as e:
             if _detect_mpi_environment():
                 raise RuntimeError(
                     "MPI environment detected (running under mpirun/mpiexec) but mpi4py is not available.\n"
@@ -60,6 +60,18 @@ def barrier():
     comm = get_communicator()
     if comm:
         comm.Barrier()
+
+
+def bcast(obj, root=0):
+    """Broadcast a picklable Python object from root to all ranks.
+
+    A no-op returning ``obj`` unchanged when running serially, so callers need
+    no ``if using_mpi`` guard.
+    """
+    comm = get_communicator()
+    if comm is None:
+        return obj
+    return comm.bcast(obj, root=root)
 
 
 def bcast_array(arr, root=0):

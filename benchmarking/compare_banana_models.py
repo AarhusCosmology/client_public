@@ -176,7 +176,7 @@ def generate_test_points(likelihood, n_samples=1000, strategy='lhs', seed=42):
     """Generate test points from the prior."""
     np.random.seed(seed)
     
-    param_names = likelihood.varying_param_names
+    param_names = likelihood.get_param_names()
     n_params = len(param_names)
     prior_bounds = likelihood.get_prior_bounds()
     
@@ -225,11 +225,11 @@ def evaluate_models(samples, true_likelihood, surrogate1, surrogate2, use_parall
     print("  Evaluating true likelihood...")
     if use_parallel:
         from utils.mpi_utils import is_mpi_available, parallel_evaluate_likelihood
-        param_names = true_likelihood.varying_param_names
+        param_names = true_likelihood.get_param_names()
         likelihood_func = lambda x: true_likelihood.loglkl({name: float(x[j]) for j, name in enumerate(param_names)})
         true_loglkls = parallel_evaluate_likelihood(samples, likelihood_func, description="true likelihood")
     else:
-        param_names = true_likelihood.varying_param_names
+        param_names = true_likelihood.get_param_names()
         true_loglkls = np.array([
             true_likelihood.loglkl({name: float(samples[i, j]) for j, name in enumerate(param_names)})
             for i in range(n_samples)
@@ -567,7 +567,7 @@ Example usage:
     print(f"  Model 2: {cfg2.wrapper} - kappa_sigma={getattr(cfg2, 'kappa_sigma', 'N/A')}")
     
     true_likelihood = true_likelihood1
-    param_names = true_likelihood.varying_param_names
+    param_names = true_likelihood.get_param_names()
     print(f"  Parameters: {param_names}")
     print()
     

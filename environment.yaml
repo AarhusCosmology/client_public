@@ -8,8 +8,6 @@ dependencies:
   - scikit-learn=1.7.1
   - h5py=3.14.0
   - matplotlib=3.10.5
-  - tqdm=4.67.1
-  - emcee=3.1.6
   - astropy=6.1.7
   - scipy=1.15.3
   - pip=25.2
