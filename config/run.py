@@ -13,7 +13,7 @@ from typing import Optional
 from .config import Config
 
 _SUBDIRS = (
-    'input',
+    'likelihood_input',
     'training_data',
     'trained_models',
     'training_history',
@@ -89,12 +89,12 @@ class Run:
         source = Path(source_config)
         shutil.copy(source, self.run_dir / source.name)
         likelihood_input = Path(self.config.likelihood.input)
-        shutil.copy(likelihood_input, self.input / likelihood_input.name)
+        shutil.copy(likelihood_input, self.likelihood_input / likelihood_input.name)
 
     # ---- Directory layout ----
     @property
-    def input(self):
-        return self.run_dir / 'input'
+    def likelihood_input(self):
+        return self.run_dir / 'likelihood_input'
 
     @property
     def training_data(self):
