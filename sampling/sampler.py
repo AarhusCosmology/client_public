@@ -1,11 +1,8 @@
 # sampling/sampler.py
 
-import sys
-import os
 import numpy as np
 import tensorflow as tf
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'resources', 'best_inference'))
 import best
 
 
