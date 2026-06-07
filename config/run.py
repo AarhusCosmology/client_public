@@ -87,6 +87,8 @@ class Run:
             (self.run_dir / name).mkdir(parents=True, exist_ok=True)
         source = Path(source_config)
         shutil.copy(source, self.run_dir / source.name)
+        likelihood_input = Path(self.config.likelihood.input)
+        shutil.copy(likelihood_input, self.run_dir / likelihood_input.name)
 
     # ---- Directory layout ----
     @property
