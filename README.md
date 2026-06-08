@@ -96,14 +96,13 @@ python setup.py install --user  # Use --user unless in a virtual/conda environme
 Install the Planck likelihood package in your chosen directory:
 
 ```bash
-wget -O COM_Likelihood_Code-v3.0_R3.01.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Code-v3.0_R3.01.tar.gz"
+git clone https://github.com/benabed/clik.git clik
 wget -O COM_Likelihood_Data-baseline_R3.00.tar.gz "http://pla.esac.esa.int/pla/aio/product-action?COSMOLOGY.FILE_ID=COM_Likelihood_Data-baseline_R3.00.tar.gz"
-tar -xvzf COM_Likelihood_Code-v3.0_R3.01.tar.gz
-tar -xvzf COM_Likelihood_Data-baseline_R3.00.tar.gz
-rm COM_Likelihood_*tar.gz
+tar -xzf COM_Likelihood_Data-baseline_R3.00.tar.gz
+rm COM_Likelihood_Data-baseline_R3.00.tar.gz
 ```
 
-From the `code/plc_3.0/plc-3.01` directory, configure and install:
+From the `clik` directory, configure and install:
 
 ```bash
 ./waf configure --install_all_deps
@@ -113,7 +112,7 @@ From the `code/plc_3.0/plc-3.01` directory, configure and install:
 If `./waf configure --install_all_deps` fails, ensure you have working C and Fortran compilers as well as the BLAS/LAPACK and CFITSIO libraries installed. For more details, including building with Intel MKL, see the [clik documentation](https://github.com/benabed/clik). To source the clik profile, run (replace with your actual installation path):
 
 ```bash
-source /absolute/path/to/plc-3.01/bin/clik_profile.sh
+source /absolute/path/to/clik/bin/clik_profile.sh
 ```
 or add this command to your `.bashrc` file to source it automatically.
 
@@ -139,6 +138,13 @@ path['clik']     = '/absolute/path/to/plc-3.01/'
 ```
 
 Replace with the absolute paths to your installations. The `clik` path is only needed if using Planck likelihoods.
+
+Create `config/montepython.yaml` with:
+
+```yaml
+conf: /absolute/path/to/config/default.conf
+path: /absolute/path/to/montepython_public/montepython
+```
 
 #### Cobaya Setup
 
@@ -190,19 +196,19 @@ For parallel likelihood evaluation with MPI (requires OpenMPI and mpi4py):
 mpirun -n <N_processes> python client.py <input_yaml|run_directory>
 ```
 
-MPI parallelizes initial sampling and resampling likelihood evaluations. Training and MCMC remain serial (leveraging TensorFlow/emcee internal parallelism).
+MPI parallelizes initial sampling and resampling likelihood evaluations. Training and MCMC remain serial (with surrogate sampling performed on the master process).
 
 ### Command Line Options
 
 **New Run Mode:**
 - `-n`, `--name`: Optional run name/tag for output organization
 - `-o`, `--output`: Base results directory (default: `results`)
-- `-i`, `--n-it N`: Number of iterations (overrides convergence criterion)
+- `-i`, `--iterations N`: Number of iterations (overrides convergence criterion)
 
 **Continue Mode:**
 - `-r`, `--retrain`: Retrain model at the starting iteration (default: skip retraining)
-- `-s`, `--start-it N`: Starting iteration (auto-detected from latest if not specified)
-- `-i`, `--n-it N`: Number of (additional) iterations (overrides convergence criterion)
+- `-s`, `--start N`: Starting iteration (auto-detected from latest if not specified)
+- `-i`, `--iterations N`: Number of (additional) iterations (overrides convergence criterion)
 
 CLiENT automatically detects the mode based on whether the path is a directory (continue) or file (new run).
 
@@ -229,7 +235,7 @@ Benchmark options:
 - `-it`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
 - `-n`, `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
 - `-t`, `--thin N`: Thinning factor for chains (default: 1)
-- `-p`, `--params N1 N2 ...`: Parameter indices to include in analysis
+- `-p`, `--params`: Parameter names, or comma-separated 1-based parameter indices, to include in analysis
 - `-c`, `--chains DIR`: Path to MontePython or Cobaya chains directory for comparison
 - `--no-training-data`: Skip loading training data visualization
 - `--no-training-history`: Skip loading training history
@@ -248,24 +254,23 @@ CLiENT implements a temperature-based iterative training scheme:
 
 1. **Initial Sampling**: Latin Hypercube sampling within restricted prior bounds (±n<sub>std</sub>σ around fiducial values)
 
-2. **Neural Network Training**: 
+2. **Neural Network Training**:
    - Deep feedforward network with the Alsing activation function
    - Mean Square Relative Error (MSRE) loss function emphasizing high-likelihood regions
    - Early stopping with validation monitoring
 
-3. **Tempered MCMC Sampling**: 
-   - Affine-invariant ensemble sampler (emcee) using surrogate likelihood
+3. **Tempered MCMC Sampling**:
+   - Surrogate sampling with methods provided by best-inference (e.g. AIES, MH, HMC, NUTS, MALA)
    - Temperature T<sub>MCMC</sub> controls exploration
-   - Adaptive convergence based on autocorrelation time and ESS
 
 4. **Adaptive Resampling**:
-    - Candidates weighted by L<sup>1/T<sub>T</sub> - 1/T<sub>MCMC</sub></sup>
-    - k-NN density-aware acceptance criterion targeting a distribution proportional to L<sup>1/T<sub>T</sub>
-    - Training temperature T<sub>T</sub> interpolates between evidence-based (T<sub>T</sub> → 1) and uniform (T<sub>T</sub> → ∞) sampling strategies
+   - Candidates weighted by L<sup>1/T<sub>T</sub> - 1/T<sub>MCMC</sub></sup>
+   - k-NN density-aware acceptance criterion targeting a distribution proportional to L<sup>1/T<sub>T</sub>
+   - Training temperature T<sub>T</sub> interpolates between evidence-based (T<sub>T</sub> → 1) and uniform (T<sub>T</sub> → ∞) sampling strategies
 
 5. **Convergence Monitoring**:
-   - Gelman-Rubin R-1 statistic between successive iterations
-   - Iterates until R-1 < threshold or maximum iterations reached
+   - Gaussian posterior drift metric between successive iterations
+   - Iterates until metric < threshold or maximum iterations reached
 
 ### Key Features
 
@@ -298,44 +303,31 @@ where β controls the broadness of the transition region and γ controls the asy
 
 All hyperparameters are specified in YAML format. See `input/example_cobaya.yaml` or `input/example_montepython.yaml` for documented configuration examples.
 
-### Key Configuration Sections
-
 ### Likelihood Configuration
 
 **MontePython:**
 ```yaml
 likelihood:
   wrapper: montepython
-  param: input/montepython/example.param  # MontePython .param file
-  conf: config/default.conf               # MontePython .conf file
-  path: resources/montepython_public/montepython
+  input: input/montepython/example.param  # MontePython .param file
 ```
 
 **Cobaya:**
 ```yaml
 likelihood:
   wrapper: cobaya
-  param: input/cobaya/example.yaml  # Cobaya .yaml file
-  conf:                             # Leave empty for Cobaya
-  path:                             # Leave empty for Cobaya
+  input: input/cobaya/example.yaml  # Cobaya .yaml file
 ```
 
 ### Data Configuration
 ```yaml
 data:
-  scalers:
-    parameters: standard    # 'standard' or 'minmax' scaling for input parameters
-    targets: standard       # 'standard' or 'minmax' scaling for targets (loglkl)
-  initial:
-    n_samples: 5000         # Number of initial samples
-    strategy: lhs           # 'lhs' (Latin Hypercube) or 'random'
-    n_std: 10.0             # Prior restriction (±10σ from fiducial)
-  iterative:
-    n_candidates: 1000      # MCMC candidate pool size per iteration
-    strategy: adaptive      # 'adaptive' or 'random'
-    k_NN: 20                # Neighbors for density estimation
-    temperature: 7.0        # Training temperature T_T
-    update_freq: 50         # KDTree rebuild frequency
+  n_samples: 5000          # Number of initial samples
+  n_sigma: 10.0            # Prior restriction (±10σ from fiducial)
+  n_augment: 1000          # Number of new points added per iteration
+  pool_factor: 20          # Candidate pool size multiplier (pool = pool_factor * n_augment)
+  n_neighbors: 20          # Neighbors for density estimation
+  target_temperature: 7.0  # Training temperature T_T
 ```
 
 ### Model Architecture
@@ -354,48 +346,44 @@ training:
   loss: msre                # 'msre' or TensorFlow loss functions
   kappa_sigma: 3            # MSRE transition scale (σ)
   learning_rate: 0.0001     # Adam optimizer learning rate
-  val_split: 0.1            # Validation split fraction
+  validation_split: 0.1     # Validation split fraction
   patience: 250             # Early stopping patience (epochs)
 ```
 
 ### Sampling Configuration
 ```yaml
 sampling:
-  save_chains: false        # Save training chains to disk
+  sampler: aies             # 'aies', 'mh', 'hmc', 'nuts', or 'mala'
   temperature: 7.0          # MCMC temperature T_MCMC
-  method: emcee             # MCMC sampler (currently only 'emcee')
-  emcee:
-    n_walkers: 216          # Number of walkers (typically 8 × n_dim)
-    max_steps: 100000       # Maximum MCMC steps
-    burn_in: 5000           # Burn-in steps to discard
-    ess_target: 50          # Target effective sample size per walker
-    delta_tau_tol: 0.05     # Autocorrelation stability tolerance
-    chunk_size: 5000        # Processing chunk size
-    ac_thin: 10             # Thinning for autocorrelation calculation
+  n_walkers: 216            # Walkers per chain (used by AIES)
+  n_chains: 2               # Number of independent chains
+  max_steps: 100000         # Maximum MCMC steps
+  burn_in: 5000             # Burn-in steps to discard
 ```
 
 ### Convergence Configuration
 ```yaml
 convergence:
-  r_minus_one_threshold: 0.01  # Gelman-Rubin R-1 convergence threshold
-  max_iterations: 20           # Maximum iterations (prevents infinite loops)
+  metric: gaussian_posterior_drift  # Convergence metric
+  threshold: 0.01                   # Convergence threshold
+  max_iterations: 20                # Maximum iterations (prevents infinite loops)
 ```
 
 ## Output Structure
 
-```
+```text
 results/YYYYMMDD_HHMMSS_run_name/
-├── scalers/                  # Standard/MinMax scalers per iteration
-├── training_data/            # HDF5 datasets (x, y) per iteration
+├── likelihood_input/         # Copy of wrapped likelihood input file
+├── training_data/            # CSV datasets (x, loglkl) per iteration
 ├── trained_models/           # Keras models (.keras format)
-├── training_history/         # Training histories as .pkl files (loss, val_loss)
-├── training_chains/          # emcee chains (if save_chains: true)
-├── convergence_stats/        # R-1 statistics and chain statistics
+├── training_history/         # Training histories as .csv files (loss, val_loss)
+├── convergence_stats/        # Saved chain summaries per iteration
 ├── benchmark_chains/         # Benchmark MCMC chains (from benchmark.py)
 ├── benchmark_figures/        # Triangle plots and visualizations (from benchmark.py)
 ├── benchmark_results/        # Diagnostics logs (from benchmark.py)
-├── metrics.log               # Various metrics for the CLiENT pipeline
-├── run.log                   # Complete run configuration and timing
+├── metrics.log               # Human-readable metrics report
+├── metrics.json              # Structured metrics (used for continuation)
+├── metadata.json             # Surrogate metadata (names, labels, scales, bounds)
 └── example.yaml              # Copy of the input configuration file
 ```
 
