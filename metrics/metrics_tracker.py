@@ -196,9 +196,9 @@ class MetricsTracker:
         metric_name = first_metrics.get('metric_name', 'metric')
         
         f.write(f"Convergence Metrics ({metric_name}):\n")
-        f.write("-" * 33 + "\n")
-        f.write(f"{'it':<3} | {metric_name:<12} | {'converged':<9}\n")
-        f.write("-" * 33 + "\n")
+            f.write("-" * 30 + "\n")
+            f.write(f"{'it':<3} | {'value':<12} | {'converged':<9}\n")
+            f.write("-" * 30 + "\n")
         
         for iteration in sorted(self.convergence_metrics.keys()):
             metrics = self.convergence_metrics[iteration]
