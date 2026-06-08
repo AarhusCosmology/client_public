@@ -1,8 +1,8 @@
 import heapq
 import numpy as np
 import tensorflow as tf
-from scipy.special import gamma, logsumexp
 
+from scipy.special import gamma, logsumexp
 
 def _unit_ball_volume(dim):
     """Volume of the unit ball in R^dim: V_dim = pi^(dim/2) / Gamma(dim/2 + 1)."""
@@ -23,7 +23,6 @@ def _systematic_resample(log_weights, M):
     u0 = np.random.uniform(0.0, 1.0 / M)
     positions = u0 + np.arange(M) / M
     return np.searchsorted(cumsum, positions)
-
 
 def select_candidates(dataset, chain, logposts, surrogate, n_augment,
                       sampling_temperature=1.0, pool_factor=20):

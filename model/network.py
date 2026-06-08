@@ -1,8 +1,8 @@
 import tensorflow as tf
+
 from .activations import build_activation, CustomTanh, Alsing
 
 _CUSTOM_OBJECTS = {'CustomTanh': CustomTanh, 'Alsing': Alsing}
-
 
 def build_model(x_train, n_layers, n_neurons, activation):
     """Build a fully-connected model with a Normalization layer baked in.

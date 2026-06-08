@@ -1,7 +1,5 @@
-# utils/mpi_utils.py
-
-import numpy as np
 import os
+import numpy as np
 
 _MPI_AVAILABLE = None
 _MPI_MODULE = None

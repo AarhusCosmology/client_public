@@ -33,6 +33,6 @@ sampling:
   burn_in: 5000
 
 convergence:
-  metric: gaussian_r_minus_one
+  metric: gaussian_posterior_drift
   threshold: 0.01
   max_iterations: 20

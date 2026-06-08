@@ -1,4 +1,5 @@
 import numpy as np
+
 from scipy.stats import qmc
 
 def _scale_unit_samples_to_bounds(unit_samples, prior_bounds):

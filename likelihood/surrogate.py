@@ -1,11 +1,8 @@
-# likelihood/surrogate.py
-
 import json
-from pathlib import Path
-from dataclasses import dataclass
-
 import tensorflow as tf
 
+from pathlib import Path
+from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SurrogateMetadata:

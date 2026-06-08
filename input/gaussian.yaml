@@ -32,7 +32,6 @@ sampling:
   max_steps: 100000
   burn_in: 5000
 
-
 convergence:
   metric: gaussian_posterior_drift
   threshold: 0.01

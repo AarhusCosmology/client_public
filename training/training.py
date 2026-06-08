@@ -2,12 +2,11 @@ import time
 import h5py
 import pandas as pd
 import tensorflow as tf
-from keras.callbacks import EarlyStopping
 
+from keras.callbacks import EarlyStopping
 
 def save_history(history, path):
     pd.DataFrame(history).to_csv(path, index=False)
-
 
 def train_model(model, inputs, targets, loss, learning_rate, n_epochs,
                 batch_size, validation_split, patience, return_metrics=False):

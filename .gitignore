@@ -22,6 +22,8 @@ gaussian_planck/
 banana_planck/
 comparison_results/
 
+# Diagnostics
+sampling/diagnostics.py
 
 # Logs
 logs/

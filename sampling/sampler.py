@@ -1,13 +1,8 @@
-# sampling/sampler.py
-
+import best
 import numpy as np
 import tensorflow as tf
 
-import best
-
-
 _BEST_METHODS = ('mh', 'aies', 'hmc', 'nuts', 'mala')
-
 
 class BestSampler:
     """Wrapper around best.Sampler (https://github.com/AndreasNygaard/best-inference).

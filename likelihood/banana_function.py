@@ -1,7 +1,4 @@
-# likelihood/banana_function.py
-
 import numpy as np
-
 
 def banana_loglkl_planck(
     omega_b, omega_cdm, theta_s_100, ln10_10_A_s, n_s, tau_reio,
