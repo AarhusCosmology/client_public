@@ -15,10 +15,11 @@ class BaseConvergenceMetric(ABC):
         pass
 
 class GaussianPosteriorDrift(BaseConvergenceMetric):
-    def __init__(self, relative_floor=1e-12):
+    def __init__(self, relative_floor=1e-12, name="gaussian_posterior_drift"):
         if relative_floor <= 0:
             raise ValueError("relative_floor must be positive")
         self.relative_floor = float(relative_floor)
+        self.name = name
 
     def _validate_chain(self, chain):
         chain = np.asarray(chain, dtype=np.float64)
@@ -139,7 +140,7 @@ def build_convergence_metric(name):
     }
     if name not in registry:
         raise ValueError(f"Unknown convergence metric: '{name}'. Available: {list(registry)}")
-    return registry[name]()
+    return registry[name](name=name)
 
 
 def save_chain_summary(convergence_stats_dir, iteration, summary):

@@ -85,9 +85,10 @@ class MetricsTracker:
             iteration, total_iteration_time, training, sampling, resampling
         ))
     
-    def add_convergence_metrics(self, iteration: int, r_minus_one: float, converged: bool) -> None:
+    def add_convergence_metrics(self, iteration: int, metric_value: float, converged: bool, metric_name: str = "metric") -> None:
         self.convergence_metrics[iteration] = {
-            'r_minus_one': float(r_minus_one),
+            'metric_name': metric_name,
+            'metric_value': float(metric_value),
             'converged': bool(converged)
         }
     
@@ -190,15 +191,19 @@ class MetricsTracker:
         if not self.convergence_metrics:
             return
         
-        f.write("Convergence Metrics (Gelman-Rubin R-1):\n")
+        # Get metric name from first entry (all should be the same)
+        first_metrics = next(iter(self.convergence_metrics.values()))
+        metric_name = first_metrics.get('metric_name', 'metric')
+        
+        f.write(f"Convergence Metrics ({metric_name}):\n")
         f.write("-" * 33 + "\n")
-        f.write(f"{'it':<3} | {'R-1':<12} | {'converged':<9}\n")
+        f.write(f"{'it':<3} | {metric_name:<12} | {'converged':<9}\n")
         f.write("-" * 33 + "\n")
         
         for iteration in sorted(self.convergence_metrics.keys()):
             metrics = self.convergence_metrics[iteration]
             converged_str = "True" if metrics['converged'] else "False"
-            f.write(f"{iteration:<3} | {metrics['r_minus_one']:<12.8f} | {converged_str:<9}\n")
+            f.write(f"{iteration:<3} | {metrics['metric_value']:<12.8f} | {converged_str:<9}\n")
         f.write("\n\n")
     
     def _save_comprehensive_metrics(self) -> None:

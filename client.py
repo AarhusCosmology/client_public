@@ -241,10 +241,10 @@ def main():
             save_chain_summary(run.convergence_stats, iteration, chain_summary)
 
             if prev_chain_summary is not None:
-                r_minus_one = metric.compute_from_summary(chain, prev_chain_summary)
-                converged = r_minus_one < config.convergence.threshold
-                print_master(f"  R-1 = {r_minus_one:.6f}  (threshold: {config.convergence.threshold})")
-                metrics_tracker.add_convergence_metrics(iteration, r_minus_one, converged)
+                metric_value = metric.compute_from_summary(chain, prev_chain_summary)
+                converged = metric_value < config.convergence.threshold
+                print_master(f"  {metric.name} = {metric_value:.6f}  (threshold: {config.convergence.threshold})")
+                metrics_tracker.add_convergence_metrics(iteration, metric_value, converged, metric_name=metric.name)
                 if use_convergence and converged:
                     print_master(f"\nConverged at iteration {iteration}!\n")
             else:
