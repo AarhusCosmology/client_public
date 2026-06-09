@@ -50,8 +50,10 @@ class MontePythonLikelihood(BaseLikelihood):
     def get_param_labels(self):
         import re
         from io_mp import get_tex_name
-        return [re.sub(r'[$]', '', get_tex_name(n, number=s))
-                for n, s in zip(self._param_names, self._scales)]
+        return [
+            re.sub(r'[$*&]', '', get_tex_name(name, scale))
+            for name, scale in zip(self._param_names, self._scales)
+        ]
 
     def get_param_scales(self):
         return list(self._scales)

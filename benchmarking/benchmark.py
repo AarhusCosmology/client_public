@@ -1,6 +1,7 @@
 # benchmarking/benchmark.py
 
 import os
+import re
 import sys
 import argparse
 import yaml
@@ -171,7 +172,7 @@ def detect_chain_format(chain_dir):
         return 'montepython'
 
 
-def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
+def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -332,7 +333,7 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
         if getattr(L, "onetail_upper", 0): return f"< {L.upper:.4f}"
         return "N/A"
     
-    lookup_names = param_names
+    lookup_names = getdist_names
     if mp_samples:
         mp_stats = mp_samples.getMargeStats()
         print(f"{'Parameter':<20} {'Surr 68%':<22} {'True 68%':<22} {'Surr 95%':<22} {'True 95%':<22}")
@@ -352,7 +353,7 @@ def print_diagnostics(samples, mp_samples, param_names, args, iteration, config_
             ps = surrogate_stats.parWithName(sname)
             s68, s95 = ps.limits[0] if ps is not None and ps.limits else None, ps.limits[1] if ps is not None and ps.limits else None
             print(f"{pname:<20} {fmt(s68):<25} {fmt(s95):<25}")
-    
+
     print(f"\n=== END DIAGNOSTICS ===")
 
 
@@ -415,6 +416,17 @@ def main():
 
     param_names = surrogate.get_param_names()
     prior_bounds = surrogate.get_prior_bounds()
+    param_labels = surrogate.get_param_labels()
+
+    getdist_names = [
+        re.sub(r'[\s*?]', '', name)
+        for name in param_names
+    ]
+
+    getdist_ranges = {
+        getdist_name: prior_bounds[param_name]
+        for param_name, getdist_name in zip(param_names, getdist_names)
+    }
 
     x_all = None
     if not args.no_training_data:
@@ -459,22 +471,20 @@ def main():
         np.savez(chain_path, chain=chain, log_prob=log_prob)
         print(f"Chain shape: {chain.shape}")
 
-    param_labels = surrogate.get_param_labels()
-
     samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])],
-                        names=param_names, labels=param_labels,
+                        names=getdist_names, labels=param_labels,
                         loglikes=[-log_prob[:, i] for i in range(log_prob.shape[1])], 
-                        ranges=prior_bounds)
+                        ranges=getdist_ranges)
     
     if args.params:
         if len(args.params) == 1 and ',' in args.params[0]:
             param_indices = [int(x) - 1 for x in args.params[0].split(',')]
-            plot_params = [param_names[i] for i in param_indices]
+            plot_params = [getdist_names[i] for i in param_indices]
         else:
-            plot_params = args.params
             param_indices = [param_names.index(p) for p in args.params]
+            plot_params = [getdist_names[i] for i in param_indices]
     else:
-        plot_params, param_indices = param_names, list(range(len(param_names)))
+        plot_params, param_indices = getdist_names, list(range(len(param_names)))
     
     mp_samples = None
     chain_format = None
@@ -489,8 +499,8 @@ def main():
                 mp_samples_list, mp_loglikes_list = load_montepython_chains(
                     args.chains, param_names, thin=1, scales=scales)
             
-            mp_samples = MCSamples(samples=mp_samples_list, names=param_names, labels=param_labels,
-                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=prior_bounds)
+            mp_samples = MCSamples(samples=mp_samples_list, names=getdist_names, labels=param_labels,
+                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=getdist_ranges)
             print(f"Loaded {sum(len(s) for s in mp_samples_list)} samples from {chain_format} chains")
         except Exception as e:
             print(f"Warning: Could not load chains: {e}")
@@ -499,12 +509,12 @@ def main():
     reference_sampler = None
     if args.chains and chain_format:
         reference_sampler = chain_format
-    
+
     log_file_path = run_dir / "benchmark_results" / f"{timestamp}_diagnostics_it_{iteration}.log"
     log_file_path.parent.mkdir(exist_ok=True), surrogate
     
     with TeeOutput(str(log_file_path)):
-        print_diagnostics(samples, mp_samples, param_names, args, iteration, config_yaml, run_dir, surrogate,
+        print_diagnostics(samples, mp_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate,
                          surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
     
     g = plots.get_subplot_plotter(width_inch=width_inches)
@@ -514,7 +524,7 @@ def main():
     g.settings.figure_legend_frame = False
     
     plot_data = ([mp_samples, samples] if mp_samples else samples)
-    plot_args = ({"filled": False, "param_limits": {n: prior_bounds[n] for n in plot_params}})
+    plot_args = ({"filled": False, "param_limits": {n: getdist_ranges[n] for n in plot_params}})
     
     if mp_samples:
         plot_args.update({"line_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}],
@@ -536,7 +546,7 @@ def main():
                 if ax := g.get_axes_for_params(plot_params[i], plot_params[j]):
                     ax.scatter(x_all[:, param_indices[i]], x_all[:, param_indices[j]],
                               s=s, alpha=0.15, color='black', zorder=1, edgecolors='none', rasterized=True)
-    
+
     [legend.remove() for legend in g.fig.legends]
     
     ref_label = f'Reference ({reference_sampler})' if reference_sampler else 'True Posterior'

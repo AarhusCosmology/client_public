@@ -71,6 +71,16 @@ class SurrogateLikelihood:
     def logpost(self, positions):
         return self.loglkl(positions) + self.logprior(positions)
 
+    def loglkl_and_gradient(self, positions):
+        with tf.GradientTape() as tape:
+            tape.watch(positions)
+            loglkl = self.loglkl(positions)
+        gradient = tape.gradient(loglkl, positions)
+        return loglkl, gradient
 
-
-
+    def logpost_and_gradient(self, positions):
+        with tf.GradientTape() as tape:
+            tape.watch(positions)
+            logpost = self.logpost(positions)
+        gradient = tape.gradient(logpost, positions)
+        return logpost, gradient
