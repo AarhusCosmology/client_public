@@ -108,9 +108,36 @@ class TrainingDataset:
         new_inputs = candidates[valid]
         new_targets = log_L_values[valid]
 
+        n_duplicate_batch = 0
+        n_duplicate_existing = 0
+
+        if len(new_inputs) > 0:
+            # Keep first occurrence order when removing duplicates in this batch.
+            _, unique_idx = np.unique(new_inputs, axis=0, return_index=True)
+            if len(unique_idx) < len(new_inputs):
+                n_duplicate_batch = len(new_inputs) - len(unique_idx)
+                keep = np.sort(unique_idx)
+                new_inputs = new_inputs[keep]
+                new_targets = new_targets[keep]
+
+        if len(new_inputs) > 0:
+            row_dtype = np.dtype((np.void, new_inputs.dtype.itemsize * new_inputs.shape[1]))
+            existing_rows = np.ascontiguousarray(self.inputs).view(row_dtype).ravel()
+            candidate_rows = np.ascontiguousarray(new_inputs).view(row_dtype).ravel()
+            is_new = ~np.isin(candidate_rows, existing_rows)
+            n_duplicate_existing = int((~is_new).sum())
+            new_inputs = new_inputs[is_new]
+            new_targets = new_targets[is_new]
+
         n_added = len(new_inputs)
-        print(f"  {n_added}/{len(candidates)} points added"
-              + (f", {n_nonfinite} discarded as non-finite" if n_nonfinite else ""))
+        msg = f"  {n_added}/{len(candidates)} points added"
+        if n_nonfinite:
+            msg += f", {n_nonfinite} discarded as non-finite"
+        if n_duplicate_batch:
+            msg += f", {n_duplicate_batch} duplicate candidates dropped"
+        if n_duplicate_existing:
+            msg += f", {n_duplicate_existing} already in training set"
+        print(msg)
 
         if n_added > 0:
             self.inputs = np.concatenate([self.inputs, new_inputs])

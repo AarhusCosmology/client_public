@@ -2,34 +2,50 @@ import heapq
 import numpy as np
 import tensorflow as tf
 
-from scipy.special import gamma, logsumexp
+from scipy.special import gamma
 
 def _unit_ball_volume(dim):
     """Volume of the unit ball in R^dim: V_dim = pi^(dim/2) / Gamma(dim/2 + 1)."""
     return np.pi ** (dim / 2) / gamma(dim / 2 + 1)
 
 
-def _systematic_resample(log_weights, M):
-    """Draw M indices from unnormalised log-weights via systematic resampling.
+def _weighted_sample_without_replacement(log_weights, M):
+    """Draw M unique indices from unnormalised log-weights.
 
-    Compared with multinomial resampling, systematic resampling achieves the
-    same O(M) cost with variance lower by a factor of M.
+    Uses the Gumbel-top-k trick: arg top-k(log w_i + g_i) with i.i.d.
+    g_i ~ Gumbel(0, 1) samples exactly from the weighted distribution
+    without replacement.
     """
-    log_w = log_weights - logsumexp(log_weights)
-    w = np.exp(log_w)
-    w /= w.sum()  # numerical safety
-    cumsum = np.cumsum(w)
-    cumsum[-1] = 1.0  # clamp to exactly 1
-    u0 = np.random.uniform(0.0, 1.0 / M)
-    positions = u0 + np.arange(M) / M
-    return np.searchsorted(cumsum, positions)
+    S = len(log_weights)
+    if M <= 0 or S == 0:
+        return np.empty((0,), dtype=np.int64)
+    if M >= S:
+        return np.arange(S, dtype=np.int64)
+
+    log_w = np.asarray(log_weights, dtype=np.float64)
+    finite = np.isfinite(log_w)
+    if not finite.any():
+        return np.random.choice(S, size=M, replace=False)
+
+    # Stabilise finite weights and keep non-finite ones effectively unselectable.
+    log_w = log_w.copy()
+    log_w[finite] -= np.max(log_w[finite])
+    log_w[~finite] = -np.inf
+
+    u = np.random.uniform(np.finfo(np.float64).tiny, 1.0, size=S)
+    gumbel = -np.log(-np.log(u))
+    keys = log_w + gumbel
+
+    top = np.argpartition(keys, -M)[-M:]
+    top = top[np.argsort(keys[top])[::-1]]
+    return top.astype(np.int64)
 
 def select_candidates(dataset, chain, logposts, surrogate, n_augment,
                       sampling_temperature=1.0, pool_factor=20):
     """Select n_augment candidate points from the MCMC chain for true-likelihood evaluation.
 
     Draws M = pool_factor * n_augment candidates via importance-weighted
-    systematic resampling from the chain (biasing toward the training target
+    sampling without replacement from the chain (biasing toward the training target
     density L^{1/T}), scores each candidate using the surrogate likelihood
     and the current k-NN density estimate, then runs a lazy min-heap with
     incremental union-query density updates to select the n_augment candidates
@@ -84,8 +100,18 @@ def select_candidates(dataset, chain, logposts, surrogate, n_augment,
     #   log w_i = log_L_i * (1/T - 1/T_MC) = logposts_i * (T_MC/T - 1) * (-1)
     # which simplifies to (T_MC/T - 1) * logposts_i (= 0 when T == T_MC).
     log_weights = (sampling_temperature / target_temperature - 1.0) * logposts
-    pool_idx = _systematic_resample(log_weights, M)
+    pool_idx = _weighted_sample_without_replacement(log_weights, M)
     candidates = chain[pool_idx]
+
+    # Chain indices are unique, but rejected MCMC proposals can repeat states.
+    # Keep only unique coordinates so augmentation candidates are point-unique.
+    if len(candidates) > 0:
+        _, unique_pos = np.unique(candidates, axis=0, return_index=True)
+        if len(unique_pos) < len(candidates):
+            unique_pos.sort()
+            candidates = candidates[unique_pos]
+
+    M = len(candidates)
     print(f"Augmentation: pool of {M} candidates (pool_factor={pool_factor}, "
           f"chain length={S})")
 

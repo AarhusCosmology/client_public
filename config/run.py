@@ -1,6 +1,6 @@
 import shutil
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -24,6 +24,36 @@ class Run:
     start_iteration: int
     iterations_override: Optional[int]  # explicit --iterations (None => use convergence)
 
+    @staticmethod
+    def _resolve_continuation_likelihood_input(run_dir: Path, config: Config) -> Config:
+        """Prefer the run-local copied likelihood input when continuing.
+
+        Priority:
+        1) likelihood_input/<original basename> if present
+        2) the sole file in likelihood_input/ if exactly one exists
+        3) leave config unchanged
+        """
+        li_dir = run_dir / 'likelihood_input'
+        if not li_dir.is_dir():
+            return config
+
+        original_name = Path(config.likelihood.input).name
+        named_copy = li_dir / original_name
+        if named_copy.is_file():
+            return replace(
+                config,
+                likelihood=replace(config.likelihood, input=str(named_copy)),
+            )
+
+        files = [p for p in li_dir.iterdir() if p.is_file()]
+        if len(files) == 1:
+            return replace(
+                config,
+                likelihood=replace(config.likelihood, input=str(files[0])),
+            )
+
+        return config
+
     @classmethod
     def from_args(cls, args):
         path = Path(args.input_or_dir)
@@ -35,6 +65,7 @@ class Run:
             if not yaml_files:
                 raise FileNotFoundError(f"No YAML configuration found in {run_dir}")
             config = Config.from_yaml(yaml_files[0])
+            config = cls._resolve_continuation_likelihood_input(run_dir, config)
 
             if args.start is None:
                 models = (run_dir / 'trained_models').glob('trained_model_it_*.keras')

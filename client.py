@@ -51,7 +51,11 @@ def main():
         run = Run.from_args(args)
         if not run.is_continuation:
             run.create_directories(args.input_or_dir)
-        metrics_tracker = MetricsTracker(run.run_dir, start_iteration=run.start_iteration)
+        metrics_tracker = MetricsTracker(
+            run.run_dir,
+            start_iteration=run.start_iteration,
+            preserve_start_training=run.reuse_initial_model,
+        )
         print_master(f"Run:     {run.run_id}  [{run.mode_label}]")
         print_master(f"Results: {run.run_dir}\n")
     else:
