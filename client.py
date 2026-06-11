@@ -15,7 +15,7 @@ from model.network import build_model, load_model
 from sampling.prior_sampler import sample_prior
 from sampling.sampler import build_sampler
 from training.dataset import TrainingDataset
-from training.acquisition import select_candidates
+from training.acquisition import select_candidates, apply_true_gate
 from training.losses import build_loss
 from training.training import train_model, save_history
 from utils.mpi_utils import (
@@ -252,7 +252,7 @@ def main():
                 if use_convergence and converged:
                     print_master(f"\nConverged at iteration {iteration}!\n")
             else:
-                print_master("  R-1 not yet calculable (need >= 2 iterations)")
+                print_master(f"  {metric.name} not yet calculable (need >= 2 iterations)")
             prev_chain_summary = chain_summary
 
         if use_convergence:
@@ -283,7 +283,19 @@ def main():
             )
 
             if is_master():
-                dataset.add_evaluated_points(selected, log_L_selected)
+                n_evaluated = len(selected)
+
+                # Apply true-likelihood acceptance gate: build a separate
+                # true-score priority queue and accept only candidates whose
+                # score falls below the dynamic threshold log_c.  Surrogate
+                # and true scores are never mixed.
+                gated_candidates, gated_log_L = apply_true_gate(
+                    dataset=dataset,
+                    candidates=selected,
+                    log_L_true=log_L_selected,
+                )
+
+                dataset.add_evaluated_points(gated_candidates, gated_log_L)
 
                 n_added     = len(dataset.inputs) - n_before
                 resamp_time = time.time() - t_resamp
@@ -293,7 +305,7 @@ def main():
                 metrics_tracker.add_resampling_metrics(
                     iteration=iteration,
                     pool_size=min(config.data.pool_factor * config.data.n_augment, len(chain)),
-                    n_evaluated=len(selected),
+                    n_evaluated=n_evaluated,
                     n_added=n_added,
                     resampling_time=resamp_time,
                 )
