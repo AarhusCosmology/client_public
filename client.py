@@ -159,6 +159,7 @@ def main():
 
                 model = build_model(
                     x_train=inputs,
+                    y_train=targets,
                     n_layers=config.model.n_layers,
                     n_neurons=config.model.n_neurons,
                     activation=config.model.activation,
