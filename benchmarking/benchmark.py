@@ -360,7 +360,7 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
 def main():
     parser = argparse.ArgumentParser(description='Benchmark surrogate likelihood')
     parser.add_argument('run_dir', help='Path to run directory')
-    parser.add_argument('-it', '--iteration', type=int, default=None, help='Iteration to benchmark (auto-detects latest if not specified)')
+    parser.add_argument('-i', '--iteration', type=int, default=None, help='Iteration to benchmark (auto-detects latest if not specified)')
     parser.add_argument('-n', '--n-steps', type=int, default=None, help='Number of MCMC steps (defaults to max_steps from config)')
     parser.add_argument('-t', '--thin', type=int, default=1, help='Thinning factor for chains')
     parser.add_argument('-p', '--params', nargs='+', default=None, help='Parameter indices to include in analysis')
