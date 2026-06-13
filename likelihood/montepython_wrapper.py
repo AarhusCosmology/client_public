@@ -94,9 +94,6 @@ class MontePythonLikelihood(BaseLikelihood):
                 return -np.inf
         return 0.0
 
-    def logpost(self, x):
-        return self.loglkl(x) + self.logprior(x)
-
     def __del__(self):
         if hasattr(self, '_tmp_output'):
             try:
