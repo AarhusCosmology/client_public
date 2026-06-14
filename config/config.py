@@ -18,7 +18,7 @@ class LikelihoodConfig:
 class DataConfig:
     n_samples: int
     n_sigma: float
-    n_augment: int
+    batch_size: int
     n_neighbors: int
     target_temperature: float
     pool_factor: int
@@ -28,7 +28,7 @@ class DataConfig:
         return cls(
             n_samples=int(d['n_samples']),
             n_sigma=float(d['n_sigma']),
-            n_augment=int(d['n_augment']),
+            batch_size=int(d['batch_size']),
             n_neighbors=int(d['n_neighbors']),
             target_temperature=float(d['target_temperature']),
             pool_factor=int(d['pool_factor']),

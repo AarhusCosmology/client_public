@@ -5,7 +5,7 @@ likelihood:
 data:
   n_samples: 5000
   n_sigma: 10.0
-  n_augment: 2500
+  batch_size: 1000
   pool_factor: 20
   n_neighbors: 20
   target_temperature: 7.0

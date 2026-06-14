@@ -275,7 +275,7 @@ def main():
                     chain=chain,
                     logposts=logposts.astype(np.float64),
                     surrogate=surrogate,
-                    n_augment=config.data.n_augment,
+                    batch_size=config.data.batch_size,
                     sampling_temperature=config.sampling.temperature,
                     pool_factor=config.data.pool_factor,
                 ),
@@ -293,7 +293,7 @@ def main():
                 dataset.save(run.training_data / f'training_data_it_{iteration + 1}.csv')
                 metrics_tracker.add_resampling_metrics(
                     iteration=iteration,
-                    pool_size=min(config.data.pool_factor * config.data.n_augment, len(chain)),
+                    pool_size=min(config.data.pool_factor * config.data.batch_size, len(chain)),
                     n_evaluated=len(selected),
                     n_added=n_added,
                     resampling_time=resamp_time,
