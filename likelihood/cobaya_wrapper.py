@@ -14,7 +14,6 @@ class CobayaLikelihood(BaseLikelihood):
         self._param_names = self._get_varying_params()
         self._raw_bounds = self._compute_bounds()
         self._effective_bounds = None
-        print_master(f"Cobaya: found {len(self._param_names)} parameters: {', '.join(self._param_names)}")
 
     def get_param_names(self):
         return self._param_names

@@ -18,7 +18,7 @@ class MontePythonLikelihood(BaseLikelihood):
             sys.path.append(montepython_path)
 
         self._tmp_output = tempfile.TemporaryDirectory(prefix="mp_")
-        command = f'run -p {input_file} --conf {conf_file} -o {self._tmp_output.name} --chain-number 0 --silent'
+        command = f'run -p {input_file} --conf {conf_file} -o {self._tmp_output.name} --chain-number 0'
 
         from initialise import initialise as mp_initialise
         from sampler import compute_lkl
@@ -31,7 +31,6 @@ class MontePythonLikelihood(BaseLikelihood):
         self._scales = [self.data.mcmc_parameters[n]['scale'] for n in self._param_names]
         self._raw_bounds = self._compute_bounds()
         self._effective_bounds = None
-        print_master(f"MontePython: found {len(self._param_names)} parameters: {', '.join(self._param_names)}")
 
     def get_param_names(self):
         return self._param_names
