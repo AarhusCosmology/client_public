@@ -48,20 +48,20 @@ def select_candidates(dataset, chain, logposts, surrogate, batch_size,
     q_surr ∝ L_surr^{1/T}) and then thinned so that the accepted points are
     distributed in proportion to the *positive point-number deficit*
 
-        d_+(θ) = [ N_{t+1} q_surr(θ) - ρ(θ) ]_+ ,   N_{t+1} = N_t + batch_size,
+        d_+(θ) = [ (N_t + 1) q_surr(θ) - ρ(θ) ]_+ ,
 
     i.e. they preferentially fill regions that are under-represented relative
     to where the current surrogate target density says training points should
     be. Each candidate is retained with the bounded density-deficit probability
 
-        a(θ) = [ 1 - ρ(θ) / (N_{t+1} q_surr(θ)) ]_+ = [ 1 - 1/D(θ) ]_+ ,
-        D(θ) = N_{t+1} q_surr(θ) / ρ(θ) ,
+        a(θ) = [ 1 - ρ(θ) / ((N_t + 1) q_surr(θ)) ]_+ = [ 1 - 1/D(θ) ]_+ ,
+        D(θ) = (N_t + 1) q_surr(θ) / ρ(θ) ,
 
     and points are drawn one at a time (categorical ∝ a) with the candidate
     density ρ updated after every acceptance. This sequential update is what
     distinguishes the rule from a one-shot draw: once a sparse pocket receives
     a point its local deficit shrinks, so it stops attracting the next one and
-    the realised training density tracks N_{t+1} q_surr faithfully even when
+    the realised training density tracks (N_t + 1) q_surr faithfully even when
     ``batch_size`` is an appreciable fraction of N_t.
 
     Whitening. All densities and distances are computed in the whitened
@@ -102,7 +102,7 @@ def select_candidates(dataset, chain, logposts, surrogate, batch_size,
     k = dataset.n_neighbors
     target_temperature = dataset.target_temperature
     n_train = len(dataset.inputs)
-    N_next = n_train + batch_size
+    N_current = n_train
 
     chain = np.asarray(chain, dtype=np.float32)
     logposts = np.asarray(logposts, dtype=np.float64)
@@ -152,8 +152,9 @@ def select_candidates(dataset, chain, logposts, surrogate, batch_size,
     # ---- Per-candidate surrogate log-likelihood and constant log-q_surr offset ----
     log_L_surrs = surrogate.loglkl(
         tf.constant(candidates, dtype=tf.float32)).numpy().astype(np.float64)
-    # log[ N_{t+1} q_surr(θ) ] = log N_{t+1} + ℓ_surr/T - log Ẑ_surr  (whitened).
-    log_target = np.log(N_next) + log_L_surrs / target_temperature - log_Z_surr
+    # Frozen surrogate target density, without the current point-count multiplier.
+    # log q_surr(θ) = ℓ_surr(θ)/T - log Ẑ_surr  (whitened).
+    log_q_surr = log_L_surrs / target_temperature - log_Z_surr
 
     # Candidate density uses the k estimator against the union (training set +
     # accepted points). d_train_all holds the k nearest *training* distances;
@@ -172,7 +173,12 @@ def select_candidates(dataset, chain, logposts, surrogate, batch_size,
         r_k = np.partition(merged, k - 1, axis=1)[:, k - 1]
         log_rho_cur = log_k - log_ball_vol - dim * np.log(r_k)
 
-        # log D = log[N_{t+1} q_surr] - log ρ_cur ; a = [1 - 1/D]_+ = [1 - e^{-logD}]_+.
+        # Next-point target:
+        # log[(N_t + 1) q_surr(θ)] = log(N_current + 1) + log q_surr(θ).
+        log_target = np.log(N_current + 1) + log_q_surr
+
+        # log D = log[(N_t + 1) q_surr] - log ρ_cur ;
+        # a = [1 - 1/D]_+ = [1 - e^{-logD}]_+.
         log_D = log_target - log_rho_cur
         a = np.where(log_D > 0.0, -np.expm1(-log_D), 0.0)
         a[~available] = 0.0
@@ -191,6 +197,7 @@ def select_candidates(dataset, chain, logposts, surrogate, batch_size,
 
         selected_indices.append(i)
         available[i] = False
+        N_current += 1
 
         # Fold the newly accepted point into every candidate's accepted-distance
         # buffer, keeping the k smallest — this is the sequential density update.
