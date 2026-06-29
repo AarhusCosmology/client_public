@@ -1,0 +1,38 @@
+likelihood:
+  wrapper: montepython
+  input: input/montepython/sterileLCDM_TTTEEE_lensing_bao.param
+
+data:
+  n_samples: 5000
+  n_sigma: 10.0
+  batch_size: 1000
+  pool_factor: 20
+  n_neighbors: 20
+  target_temperature: 7.0
+
+model:
+  n_layers: 5
+  n_neurons: 512
+  activation: alsing
+
+training:
+  n_epochs: 5000
+  batch_size: 128
+  loss: msre
+  kappa_sigma: 3
+  learning_rate: 0.0001
+  validation_split: 0.1
+  patience: 250
+
+sampling:
+  sampler: aies
+  temperature: 7.0
+  n_walkers: 232
+  n_chains: 1
+  max_steps: 100000
+  burn_in: 5000
+
+convergence:
+  metric: gaussian_posterior_drift
+  threshold: 0.01
+  max_iterations: 20

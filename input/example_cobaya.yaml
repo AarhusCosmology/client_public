@@ -1,0 +1,39 @@
+likelihood:
+  wrapper: cobaya # 'montepython' or 'cobaya'
+  input: input/cobaya/example.yaml # path to the Cobaya input (.yaml) or MontePython parameter (.param) file
+
+data:
+  n_initial: 100 # number of initial samples drawn via Latin hypercube
+  n_sigma: 100.0 # prior box half-width in units of parameter std
+  n_append: 50 # number of new training points added per iteration (B_t)
+  pool_factor: 20 # candidate pool size is pool_factor * batch_size
+  n_neighbors: 20 # k for the k-NN density estimator
+  target_temperature: 7.0 # temperature T defining the target density L^{1/T} * pi
+
+model:
+  n_layers: 5 # number of hidden layers
+  n_neurons: 512 # neurons per hidden layer
+  activation: alsing # 'alsing', 'custom_tanh', or standard Keras name
+
+training:
+  n_epochs: 500 # maximum training epochs
+  batch_size: 128
+  loss: msre # 'msre' or standard Keras loss name
+  kappa_sigma: 3 # MSRE transition width in sigma
+  learning_rate: 0.001
+  validation_split: 0.1
+  patience: 250 # early-stopping patience
+
+sampling:
+  sampler: aies
+  temperature: 7.0 # MCMC sampling temperature
+  n_walkers: 16
+  n_chains: 2
+  max_steps: 10000
+  burn_in: 500
+
+convergence:
+  metric: gaussian_posterior_drift
+  threshold: 0.01 # R-1 threshold
+  max_iterations: 20
+
