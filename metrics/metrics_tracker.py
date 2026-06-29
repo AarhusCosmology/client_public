@@ -8,9 +8,9 @@ from datetime import datetime
 @dataclass
 class TrainingMetrics:
     iteration: int
-    epochs_trained: int
-    final_train_loss: float
-    final_val_loss: float
+    best_epoch: int
+    best_train_loss: float
+    best_val_loss: float
     training_time: float
     
 @dataclass
@@ -65,11 +65,11 @@ class MetricsTracker:
                 return
         metrics_list.append(metric)
     
-    def add_training_metrics(self, iteration: int, epochs_trained: int, 
-                           final_train_loss: float, final_val_loss: float,
+    def add_training_metrics(self, iteration: int, best_epoch: int,
+                           best_train_loss: float, best_val_loss: float,
                            training_time: float) -> None:
         self._upsert_metric(self.training_metrics, TrainingMetrics(
-            iteration, epochs_trained, final_train_loss, final_val_loss, training_time
+            iteration, best_epoch, best_train_loss, best_val_loss, training_time
         ))
     
     def add_sampling_metrics(self, iteration: int, steps_per_walker: int,
@@ -118,19 +118,19 @@ class MetricsTracker:
             return
         
         f.write("Training Metrics:\n")
-        f.write("-" * 51 + "\n")
-        f.write(f"{'it':<3} | {'epochs':<7} | {'loss':<10} | {'val_loss':<10} | {'time':<6}\n")
-        f.write("-" * 51 + "\n")
+        f.write("-" * 54 + "\n")
+        f.write(f"{'it':<3} | {'best_ep':<7} | {'best_loss':<10} | {'best_val':<10} | {'time':<6}\n")
+        f.write("-" * 54 + "\n")
         
         for m in sorted(self.training_metrics, key=lambda x: x.iteration):
-            f.write(f"{m.iteration:<3} | {m.epochs_trained:<7} | {m.final_train_loss:<10.6f} | {m.final_val_loss:<10.6f} | {m.training_time/60:<6.2f}\n")
+            f.write(f"{m.iteration:<3} | {m.best_epoch:<7} | {m.best_train_loss:<10.6f} | {m.best_val_loss:<10.6f} | {m.training_time/60:<6.2f}\n")
         
-        f.write("-" * 51 + "\n")
-        avg_epochs = sum(m.epochs_trained for m in self.training_metrics) / len(self.training_metrics)
-        avg_loss = sum(m.final_train_loss for m in self.training_metrics) / len(self.training_metrics)
-        avg_val_loss = sum(m.final_val_loss for m in self.training_metrics) / len(self.training_metrics)
+        f.write("-" * 54 + "\n")
+        avg_best_epoch = sum(m.best_epoch for m in self.training_metrics) / len(self.training_metrics)
+        avg_best_loss = sum(m.best_train_loss for m in self.training_metrics) / len(self.training_metrics)
+        avg_best_val_loss = sum(m.best_val_loss for m in self.training_metrics) / len(self.training_metrics)
         avg_time = sum(m.training_time for m in self.training_metrics) / len(self.training_metrics)
-        f.write(f"{'avg':<3} | {avg_epochs:<7.1f} | {avg_loss:<10.6f} | {avg_val_loss:<10.6f} | {avg_time/60:<6.2f}\n")
+        f.write(f"{'avg':<3} | {avg_best_epoch:<7.1f} | {avg_best_loss:<10.6f} | {avg_best_val_loss:<10.6f} | {avg_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_sampling_metrics(self, f):
