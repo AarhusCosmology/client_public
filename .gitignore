@@ -1,0 +1,79 @@
+# IDE
+.vscode/
+
+# Data and auxiliary files
+auxTTTEEE_01/
+sterile_TTTEEE_01/
+new_sterile_TTTEEE_01/
+new_TTTEEE_01/
+test_gaussian/
+test2/
+
+# MontePython Configuration file
+config/default.conf
+config/montepython.yaml
+
+# Results
+example_chains/
+example_cobaya/
+example_montepython/
+montepython_chains/
+gaussian_planck/
+banana_planck/
+comparison_results/
+
+# Diagnostics
+sampling/diagnostics.py
+
+# Logs
+logs/
+
+# Resources
+resources/
+
+# Results
+results/
+results_old/
+
+# Documentation and job scripts
+mpi_guide.md
+example_jobscript.sh
+example_jobscript_mpi.sh
+example_jobscript_gpu_mpi.sh
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS files
+.DS_Store
+Thumbs.db
