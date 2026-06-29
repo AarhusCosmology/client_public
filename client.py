@@ -4,20 +4,13 @@ import numpy as np
 
 from config.run import Run
 from likelihood.base import build_likelihood
-from likelihood.surrogate import SurrogateLikelihood, SurrogateMetadata
 from metrics.convergence import (
     build_convergence_metric,
     save_chain_summary,
     load_chain_summary,
 )
 from metrics.metrics_tracker import MetricsTracker
-from model.network import build_model, load_model
 from sampling.prior_sampler import sample_prior
-from sampling.sampler import build_sampler
-from training.dataset import TrainingDataset
-from training.acquisition import select_points
-from training.losses import build_loss
-from training.training import train_model, save_history
 from utils.mpi_utils import (
     is_mpi_available,
     is_master,
@@ -81,6 +74,7 @@ def main():
 
     surrogate_metadata = None
     if is_master():
+        from likelihood.surrogate import SurrogateMetadata
         surrogate_metadata = SurrogateMetadata.from_likelihood(likelihood)
         if not run.is_continuation:
             surrogate_metadata.save(run.run_dir / 'metadata.json')
@@ -88,6 +82,7 @@ def main():
     # ---- Training data ----
     if run.is_continuation:
         if is_master():
+            from training.dataset import TrainingDataset
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data,
                 likelihood=likelihood,
@@ -107,6 +102,7 @@ def main():
             description="initial samples",
         )
         if is_master():
+            from training.dataset import TrainingDataset
             valid = np.isfinite(y_init)
             if (~valid).any():
                 print_master(f"  Warning: filtered {(~valid).sum()}/{len(y_init)} samples with non-finite log-lkl")
@@ -150,6 +146,9 @@ def main():
         skip_train = (run.reuse_initial_model and iteration == start_it)
 
         if not skip_train and is_master():
+            from model.network import build_model
+            from training.losses import build_loss
+            from training.training import train_model, save_history
             if model_path.exists() and not run.retrain:
                 print_master(f"Loading existing model from {model_path}")
             else:
@@ -193,8 +192,10 @@ def main():
         # -- Sampling --
         chain = logposts = None
         if is_master():
+            from model.network import load_model
+            from likelihood.surrogate import SurrogateLikelihood
+            from sampling.sampler import build_sampler
             model = load_model(model_path)
-
             if surrogate is None:
                 surrogate = SurrogateLikelihood(model, surrogate_metadata)
                 sampler   = build_sampler(
@@ -268,6 +269,9 @@ def main():
         if iteration < run.last_iteration:
             t_resamp = time.time()
             n_before = len(dataset.inputs) if is_master() else None
+
+            if is_master():
+                from training.acquisition import select_points
 
             selected, log_L_selected = broadcast_and_evaluate(
                 lambda: select_points(
