@@ -72,7 +72,7 @@ class MontePythonLikelihood(BaseLikelihood):
 
         return params
 
-    def backend_logpost(self, x):
+    def loglkl(self, x):
         # Convert the input vector into MontePython's internal unscaled units
         for value, param in zip(x, self._params):
             self.data.mcmc_parameters[param.name]['current'] = value / param.scale
@@ -85,18 +85,18 @@ class MontePythonLikelihood(BaseLikelihood):
 
         # Build CLASS arguments for this point and evaluate the log-likelihood.
         self.data.update_cosmo_arguments()
-        logpost = float(self.compute_lkl(self.cosmo, self.data))
+        loglkl = float(self.compute_lkl(self.cosmo, self.data))
 
         # MontePython uses data.boundary_loglike, typically -1e30, as a rejection
         # sentinel for invalid points, e.g. failed CLASS evaluations or prior-boundary
         # violations. Since finite likelihood terms may be added to this sentinel,
         # treat any value still in that extreme negative regime as -inf
-        if not np.isfinite(logpost):
+        if not np.isfinite(loglkl):
             return -np.inf
-        if logpost <= self.data.boundary_loglike / 2:
+        if loglkl <= self.data.boundary_loglike / 2:
             return -np.inf
 
-        return logpost
+        return loglkl
     
     def close(self):
         # Release the temporary MontePython output directory, if it still exists

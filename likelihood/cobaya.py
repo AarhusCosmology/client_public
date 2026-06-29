@@ -54,7 +54,7 @@ class CobayaLikelihood(BaseLikelihood):
 
         return params
     
-    def backend_logpost(self, x):
+    def loglkl(self, x):
         # Convert the input vector into the parameter dictionary expected by Cobaya.
         position = {param.name: float(value) for param, value in zip(self._params, x)}
 

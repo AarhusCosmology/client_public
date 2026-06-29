@@ -23,9 +23,9 @@ class BaseLikelihood(ABC):
         pass
 
     @abstractmethod
-    def backend_logpost(self, x):
+    def loglkl(self, x):
         """
-        Evaluate the backend's native log-probability at ``x``. For MontePython, this calls ``compute_lkl``. For Cobaya, this calls ``logposterior(..., return_derived=False)`` and returns its ``logpost`` value. The returned value will include both log-likelihood and backend-defined log-prior contributions. Additional bounds imposed by ``restrict_prior_bounds`` are handled separately by ``logprior``. 
+        Evaluate the backend's native log-probability at ``x``. For MontePython, this calls ``compute_lkl``. For Cobaya, this calls ``logposterior(..., return_derived=False)`` and returns its ``logpost`` value. Despite the method name, the returned value will include both log-likelihood and backend-defined log-prior contributions. Additional bounds imposed by ``restrict_prior_bounds`` are handled separately by ``logprior``. 
         """
         pass
 
@@ -79,3 +79,12 @@ class BaseLikelihood(ABC):
         if not np.isfinite(lp):
             return -np.inf
         return self.backend_logpost(x) + lp
+    
+def build_likelihood(wrapper, input_path):
+    if wrapper == 'montepython':
+        from .montepython import MontePythonLikelihood
+        return MontePythonLikelihood(param_path=input_path)
+    if wrapper == 'cobaya':
+        from .cobaya import CobayaLikelihood
+        return CobayaLikelihood(yaml_path=input_path)
+    raise ValueError(f"Unknown likelihood wrapper: {wrapper!r}")

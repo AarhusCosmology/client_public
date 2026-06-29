@@ -3,9 +3,7 @@ import tensorflow as tf
 
 from pathlib import Path
 from dataclasses import dataclass
-
 from .base import ParameterInfo
-
 
 @dataclass(frozen=True)
 class SurrogateMetadata:
@@ -127,7 +125,7 @@ class SurrogateLikelihood:
             axis=1
         )
 
-    def backend_logpost(self, positions):
+    def loglkl(self, positions):
         # Evaluate the surrogate model at the input positions.
         return tf.squeeze(self.model(positions, training=False), axis=1)
 
@@ -137,7 +135,7 @@ class SurrogateLikelihood:
         return tf.where(in_bounds, 0.0, -float('inf'))
 
     def logpost(self, positions):
-        return self.backend_logpost(positions) + self.logprior(positions)
+        return self.loglkl(positions) + self.logprior(positions)
 
     def logpost_and_gradient(self, positions):
         with tf.GradientTape() as tape:
