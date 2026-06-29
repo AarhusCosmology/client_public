@@ -67,7 +67,7 @@ class TrainingDataset:
                 int(p.stem.rsplit('_', 1)[1])
                 for p in Path(training_data_dir).iterdir()
             )
-        path = Path(training_data_dir) / f'training_data_{iteration}.csv'
+        path = Path(training_data_dir) / f'training_data_it_{iteration}.csv'
         df = pd.read_csv(path)
         param_names = likelihood.get_param_names()
         inputs = df[param_names].to_numpy()
