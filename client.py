@@ -192,23 +192,21 @@ def main():
         # -- Sampling --
         chain = logposts = None
         if is_master():
+            import tensorflow as tf
+            tf.keras.backend.clear_session()
             from model.network import load_model
             from likelihood.surrogate import SurrogateLikelihood
             from sampling.sampler import build_sampler
             model = load_model(model_path)
-            if surrogate is None:
-                surrogate = SurrogateLikelihood(model, surrogate_metadata)
-                sampler   = build_sampler(
-                    name=config.sampling.sampler,
-                    n_walkers=config.sampling.n_walkers,
-                    n_chains=config.sampling.n_chains,
-                    ndim=ndim,
-                    logpost_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
-                    bounds=(prior_lower, prior_upper),
-                )
-            else:
-                # Update weights in-place to preserve the compiled XLA graph.
-                surrogate.model.set_weights(model.get_weights())
+            surrogate = SurrogateLikelihood(model, surrogate_metadata)
+            sampler = build_sampler(
+                name=config.sampling.sampler,
+                n_walkers=config.sampling.n_walkers,
+                n_chains=config.sampling.n_chains,
+                ndim=ndim,
+                logpost_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
+                bounds=(prior_lower, prior_upper),
+            )
 
             print_master(f"Sampling (method={config.sampling.sampler}, {config.sampling.n_chains} chains × {config.sampling.n_walkers} walkers, T={config.sampling.temperature})...")
             t_sample = time.time()
