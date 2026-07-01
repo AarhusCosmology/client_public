@@ -4,20 +4,13 @@ import numpy as np
 
 from config.run import Run
 from likelihood.base import build_likelihood
-from likelihood.surrogate import SurrogateLikelihood, SurrogateMetadata
 from metrics.convergence import (
     build_convergence_metric,
     save_chain_summary,
     load_chain_summary,
 )
 from metrics.metrics_tracker import MetricsTracker
-from model.network import build_model, load_model
 from sampling.prior_sampler import sample_prior
-from sampling.sampler import build_sampler
-from training.dataset import TrainingDataset
-from training.acquisition import select_candidates
-from training.losses import build_loss
-from training.training import train_model, save_history
 from utils.mpi_utils import (
     is_mpi_available,
     is_master,
@@ -81,6 +74,7 @@ def main():
 
     surrogate_metadata = None
     if is_master():
+        from likelihood.surrogate import SurrogateMetadata
         surrogate_metadata = SurrogateMetadata.from_likelihood(likelihood)
         if not run.is_continuation:
             surrogate_metadata.save(run.run_dir / 'metadata.json')
@@ -88,6 +82,7 @@ def main():
     # ---- Training data ----
     if run.is_continuation:
         if is_master():
+            from training.dataset import TrainingDataset
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data,
                 likelihood=likelihood,
@@ -99,14 +94,15 @@ def main():
         else:
             dataset = None
     else:
-        print_master(f"Generating and evaluating {config.data.n_samples} initial samples via Latin hypercube...")
+        print_master(f"Generating and evaluating {config.data.n_initial} initial samples via Latin hypercube...")
         t0 = time.time()
         x_init, y_init = broadcast_and_evaluate(
-            lambda: sample_prior(likelihood=likelihood, n_samples=config.data.n_samples, strategy='lhs'),
+            lambda: sample_prior(likelihood=likelihood, n_samples=config.data.n_initial, strategy='lhs'),
             loglkl_fn,
             description="initial samples",
         )
         if is_master():
+            from training.dataset import TrainingDataset
             valid = np.isfinite(y_init)
             if (~valid).any():
                 print_master(f"  Warning: filtered {(~valid).sum()}/{len(y_init)} samples with non-finite log-lkl")
@@ -150,6 +146,9 @@ def main():
         skip_train = (run.reuse_initial_model and iteration == start_it)
 
         if not skip_train and is_master():
+            from model.network import build_model
+            from training.losses import build_loss
+            from training.training import train_model, save_history
             if model_path.exists() and not run.retrain:
                 print_master(f"Loading existing model from {model_path}")
             else:
@@ -193,21 +192,21 @@ def main():
         # -- Sampling --
         chain = logposts = None
         if is_master():
+            import tensorflow as tf
+            tf.keras.backend.clear_session()
+            from model.network import load_model
+            from likelihood.surrogate import SurrogateLikelihood
+            from sampling.sampler import build_sampler
             model = load_model(model_path)
-
-            if surrogate is None:
-                surrogate = SurrogateLikelihood(model, surrogate_metadata)
-                sampler   = build_sampler(
-                    name=config.sampling.sampler,
-                    n_walkers=config.sampling.n_walkers,
-                    n_chains=config.sampling.n_chains,
-                    ndim=ndim,
-                    logpost_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
-                    bounds=(prior_lower, prior_upper),
-                )
-            else:
-                # Update weights in-place to preserve the compiled XLA graph.
-                surrogate.model.set_weights(model.get_weights())
+            surrogate = SurrogateLikelihood(model, surrogate_metadata)
+            sampler = build_sampler(
+                name=config.sampling.sampler,
+                n_walkers=config.sampling.n_walkers,
+                n_chains=config.sampling.n_chains,
+                ndim=ndim,
+                logpost_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
+                bounds=(prior_lower, prior_upper),
+            )
 
             print_master(f"Sampling (method={config.sampling.sampler}, {config.sampling.n_chains} chains × {config.sampling.n_walkers} walkers, T={config.sampling.temperature})...")
             t_sample = time.time()
@@ -269,14 +268,17 @@ def main():
             t_resamp = time.time()
             n_before = len(dataset.inputs) if is_master() else None
 
+            if is_master():
+                from training.acquisition import select_points
+
             selected, log_L_selected = broadcast_and_evaluate(
-                lambda: select_candidates(
-                    dataset,
+                lambda: select_points(
+                    dataset=dataset,
                     chain=chain,
                     logposts=logposts.astype(np.float64),
                     surrogate=surrogate,
-                    batch_size=config.data.batch_size,
-                    sampling_temperature=config.sampling.temperature,
+                    n_append=config.data.n_append,
+                    mcmc_temperature=config.sampling.temperature,
                     pool_factor=config.data.pool_factor,
                 ),
                 loglkl_fn,
@@ -284,7 +286,7 @@ def main():
             )
 
             if is_master():
-                dataset.add_evaluated_points(selected, log_L_selected)
+                dataset.add_data(selected, log_L_selected)
 
                 n_added     = len(dataset.inputs) - n_before
                 resamp_time = time.time() - t_resamp
@@ -293,7 +295,7 @@ def main():
                 dataset.save(run.training_data / f'training_data_it_{iteration + 1}.csv')
                 metrics_tracker.add_resampling_metrics(
                     iteration=iteration,
-                    pool_size=min(config.data.pool_factor * config.data.batch_size, len(chain)),
+                    pool_size=min(config.data.pool_factor * config.data.n_append, len(chain)),
                     n_evaluated=len(selected),
                     n_added=n_added,
                     resampling_time=resamp_time,

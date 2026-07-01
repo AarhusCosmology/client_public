@@ -39,7 +39,7 @@ matplotlib.rcParams.update({
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 from likelihood.base import BaseLikelihood
-from likelihood.banana_function import banana_loglkl_planck
+from input.cobaya.banana_function import banana_loglkl_planck
 from likelihood.surrogate import EmulatedLikelihood
 from config.config_loader import load_config
 

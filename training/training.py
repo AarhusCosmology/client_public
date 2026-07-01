@@ -1,5 +1,4 @@
 import time
-import h5py
 import pandas as pd
 import tensorflow as tf
 
@@ -30,10 +29,14 @@ def train_model(model, inputs, targets, loss, learning_rate, n_epochs,
     )
 
     if return_metrics:
+        best_epoch_idx = min(
+            range(len(history.history['val_loss'])),
+            key=lambda i: history.history['val_loss'][i],
+        )
         metrics = {
-            'epochs_trained': len(history.history['loss']),
-            'final_train_loss': float(history.history['loss'][-1]),
-            'final_val_loss': float(history.history['val_loss'][-1]),
+            'best_epoch': best_epoch_idx + 1,
+            'best_train_loss': float(history.history['loss'][best_epoch_idx]),
+            'best_val_loss': float(history.history['val_loss'][best_epoch_idx]),
             'training_time': time.time() - start_time,
         }
         return history, metrics

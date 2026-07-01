@@ -1,6 +1,6 @@
 likelihood:
   banana_planck:
-    external: import_module('likelihood.banana_function').banana_loglkl_planck
+    external: import_module('input.cobaya.banana_function').banana_loglkl_planck
 
 params:
   omega_b:

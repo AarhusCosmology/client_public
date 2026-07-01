@@ -3,9 +3,9 @@ likelihood:
   input: input/montepython/test_gaussian.param
 
 data:
-  n_samples: 500
+  n_initial: 500
   n_sigma: 10.0
-  batch_size: 250
+  n_append: 250
   pool_factor: 20
   n_neighbors: 20
   target_temperature: 7.0

@@ -3,9 +3,9 @@ likelihood:
   input: input/cobaya/banana_planck.yaml
 
 data:
-  n_samples: 5000
+  n_initial: 5000
   n_sigma: 10.0
-  batch_size: 1000
+  n_append: 1000
   pool_factor: 20
   n_neighbors: 20
   target_temperature: 7.0
@@ -27,7 +27,7 @@ training:
 sampling:
   sampler: aies
   temperature: 7.0
-  n_walkers: 232
+  n_walkers: 58
   n_chains: 1
   max_steps: 100000
   burn_in: 5000

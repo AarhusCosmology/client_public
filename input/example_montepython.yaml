@@ -3,10 +3,10 @@ likelihood:
   input: input/montepython/example.param # path to the MontePython parameter (.param) or Cobaya input (.yaml) file
 
 data:
-  n_samples: 100 # number of initial samples drawn via Latin hypercube
+  n_initial: 100 # number of initial samples drawn via Latin hypercube
   n_sigma: 100.0 # prior box half-width in units of parameter std
-  batch_size: 50 # number of new training points added per iteration (B_t)
-  pool_factor: 20 # candidate pool size is pool_factor * batch_size
+  n_append: 50 # number of new training points added per iteration (B_t)
+  pool_factor: 20 # candidate pool size is pool_factor * n_append
   n_neighbors: 20 # k for the k-NN density estimator
   target_temperature: 7.0 # temperature T defining the target density L^{1/T} * pi
 
