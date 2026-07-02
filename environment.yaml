@@ -3,20 +3,23 @@ channels:
   - defaults
 
 dependencies:
+  # CLiENT core
   - python=3.10.18
   - numpy=2.0.2
+  - pandas=2.2.3
   - scikit-learn=1.7.1
-  - h5py=3.14.0
-  - matplotlib=3.10.5
-  - astropy=6.1.7
   - scipy=1.15.3
+  - cython=3.1.4
+  - pyyaml=6.0.2
+
+  # Benchmarking
+  - matplotlib=3.10.5
+  - getdist=1.7.1
+
+  # Package manager
   - pip=25.2
 
+  # Pip-only packages
   - pip:
-    - cython==3.1.4
-    - pyyaml==6.0.2
-    - joblib==1.5.1
-    - threadpoolctl==3.6.0
-    - getdist==1.7.1
-    - tensorflow[and-cuda]==2.19.0
+    - tensorflow[and-cuda]==2.20.0
     - tensorflow-probability[tf]==0.25.0
