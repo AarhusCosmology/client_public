@@ -2,7 +2,7 @@ import best
 import numpy as np
 import tensorflow as tf
 
-class BestSampler:
+class BestInferenceSampler:
     """
     Wrapper around best.Sampler (https://github.com/AndreasNygaard/best-inference).
 
@@ -91,7 +91,7 @@ class BestSampler:
         return self._n_steps
 
 def build_sampler(name, n_walkers, n_chains, ndim, logpost_fn, bounds=None):
-    return BestSampler(
+    return BestInferenceSampler(
         n_walkers=n_walkers, 
         n_chains=n_chains, 
         ndim=ndim,

@@ -172,7 +172,49 @@ def detect_chain_format(chain_dir):
         return 'montepython'
 
 
-def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
+def getdist_chain_inputs(chain, log_prob):
+    """Convert sampler output into GetDist's list-of-independent-chains format."""
+    chain = np.asarray(chain)
+    log_prob = np.asarray(log_prob)
+
+    if chain.ndim == 4:
+        # AIES: (n_steps, n_chains, n_walkers, ndim)
+        if log_prob.shape != chain.shape[:-1]:
+            raise ValueError(
+                f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
+            )
+        samples = [
+            chain[:, chain_idx, :, :].reshape(-1, chain.shape[-1])
+            for chain_idx in range(chain.shape[1])
+        ]
+        loglikes = [
+            -log_prob[:, chain_idx, :].reshape(-1)
+            for chain_idx in range(chain.shape[1])
+        ]
+        return samples, loglikes
+
+    if chain.ndim == 3:
+        # Non-ensemble samplers: (n_steps, n_chains, ndim)
+        if log_prob.shape != chain.shape[:-1]:
+            raise ValueError(
+                f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
+            )
+        samples = [chain[:, chain_idx, :] for chain_idx in range(chain.shape[1])]
+        loglikes = [-log_prob[:, chain_idx] for chain_idx in range(chain.shape[1])]
+        return samples, loglikes
+
+    if chain.ndim == 2:
+        # Already flattened output from older cache files.
+        if log_prob.shape != chain.shape[:1]:
+            raise ValueError(
+                f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
+            )
+        return [chain], [-log_prob]
+
+    raise ValueError(f"Unexpected chain shape {chain.shape}")
+
+
+def print_diagnostics(samples, reference_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -189,9 +231,9 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
     
     print(f"\n=== Convergence Diagnostics (Surrogate - {surrogate_sampler}) ===")
     try:
-        surrogate_GR = samples.getGelmanRubin()
-        print(f"Gelman-Rubin statistic: {surrogate_GR:.4f}")
-        if surrogate_GR > 1.1:
+        surrogate_gr = samples.getGelmanRubin()
+        print(f"Gelman-Rubin statistic: {surrogate_gr:.4f}")
+        if surrogate_gr > 1.1:
             print("  WARNING: Gelman-Rubin > 1.1, chain may not be converged!")
         print("\nWARNING: Gelman-Rubin diagnostic is not reliable with the ensemble")
         print("         ensemble sampler as walkers are not independent chains.")
@@ -206,13 +248,13 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
         except Exception as e:
             print(f"  {pname}: N/A ({e})")
     
-    if mp_samples:
+    if reference_samples:
         ref_label = f"Reference ({reference_sampler})" if reference_sampler else "Reference/True Chains"
         print(f"\n=== Convergence Diagnostics ({ref_label}) ===")
         try:
-            mp_GR = mp_samples.getGelmanRubin()
-            print(f"Gelman-Rubin statistic: {mp_GR:.4f}")
-            if mp_GR > 1.1:
+            reference_gr = reference_samples.getGelmanRubin()
+            print(f"Gelman-Rubin statistic: {reference_gr:.4f}")
+            if reference_gr > 1.1:
                 print("  WARNING: Gelman-Rubin > 1.1, chain may not be converged!")
         except Exception as e:
             print(f"Gelman-Rubin statistic: N/A ({e})")
@@ -220,7 +262,7 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
         print(f"\nEffective sample sizes:")
         for i, pname in enumerate(param_names):
             try:
-                ess = mp_samples.getEffectiveSamples(i)
+                ess = reference_samples.getEffectiveSamples(i)
                 print(f"  {pname}: {ess:.0f}")
             except Exception as e:
                 print(f"  {pname}: N/A ({e})")
@@ -229,24 +271,24 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
     surrogate_means = samples.getMeans()
     surrogate_stds = np.sqrt(samples.getVars())
     
-    if mp_samples:
-        mp_means = mp_samples.getMeans()
-        mp_stds = np.sqrt(mp_samples.getVars())
+    if reference_samples:
+        reference_means = reference_samples.getMeans()
+        reference_stds = np.sqrt(reference_samples.getVars())
         
         header = f"{'Parameter':<20} {'Surr Mean':>12} {'True Mean':>12} {'Mean Diff':>10} {'Rel (%)':>8} {'Surr Std':>10} {'True Std':>10} {'Std Diff':>10} {'Rel (%)':>8}"
         print(header)
         print("-" * len(header))
         
         for i, pname in enumerate(param_names):
-            mean_diff = abs(surrogate_means[i] - mp_means[i])
-            relative_mean_diff = mean_diff / abs(mp_means[i]) * 100
-            std_diff = abs(surrogate_stds[i] - mp_stds[i])
-            relative_std_diff = std_diff / abs(mp_stds[i]) * 100
+            mean_diff = abs(surrogate_means[i] - reference_means[i])
+            relative_mean_diff = mean_diff / abs(reference_means[i]) * 100
+            std_diff = abs(surrogate_stds[i] - reference_stds[i])
+            relative_std_diff = std_diff / abs(reference_stds[i]) * 100
             print(
                 f"{pname:<20} "
-                f"{surrogate_means[i]:>12.4f} {mp_means[i]:>12.4f} "
+                f"{surrogate_means[i]:>12.4f} {reference_means[i]:>12.4f} "
                 f"{mean_diff:>10.4f} {relative_mean_diff:>8.1f} "
-                f"{surrogate_stds[i]:>10.4f} {mp_stds[i]:>10.4f} "
+                f"{surrogate_stds[i]:>10.4f} {reference_stds[i]:>10.4f} "
                 f"{std_diff:>10.4f} {relative_std_diff:>8.1f}"
             )
     else:
@@ -255,7 +297,7 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
         for i, pname in enumerate(param_names):
             print(f"{pname:<20} {surrogate_means[i]:>12.4f} {surrogate_stds[i]:>10.4f}")
     
-    if mp_samples:
+    if reference_samples:
         print(f"\n=== KL Divergence Analysis ===")
         print("Computing D_KL(True || Surrogate) for marginal distributions...")
         print("(measures information lost when using surrogate instead of true posterior)")
@@ -267,7 +309,7 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
             kl_values = []
             for i, pname in enumerate(param_names):
                 kl_nats = compute_kl_divergence_kde(
-                    mp_samples.samples[:, i:i+1],
+                    reference_samples.samples[:, i:i+1],
                     samples.samples[:, i:i+1],
                     param_indices=[0],
                     max_samples_kde=5000
@@ -293,11 +335,11 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
     surrogate_bestfit = samples.samples[np.argmin(samples.loglikes)]
     print(f"Surrogate ({surrogate_sampler}) maximum of log(likelihood): {-min(samples.loglikes):.4f}")
     
-    if mp_samples:
-        mp_bestfit = mp_samples.samples[np.argmin(mp_samples.loglikes)]
-        print(f"Reference ({reference_sampler}) maximum of log(likelihood): {-min(mp_samples.loglikes):.4f}")
+    if reference_samples:
+        reference_bestfit = reference_samples.samples[np.argmin(reference_samples.loglikes)]
+        print(f"Reference ({reference_sampler}) maximum of log(likelihood): {-min(reference_samples.loglikes):.4f}")
         if surrogate is not None:
-            surr_at_true_map = float(surrogate.logpost(tf.cast(mp_bestfit.reshape(1, -1), tf.float32)).numpy()[0])
+            surr_at_true_map = float(surrogate.logpost(tf.cast(reference_bestfit.reshape(1, -1), tf.float32)).numpy()[0])
             print(f"Surrogate log(likelihood) at reference ({reference_sampler}) best-fit: {surr_at_true_map:.4f}")
         
         print()
@@ -307,12 +349,12 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
         
         map_diffs = []
         for i, pname in enumerate(param_names):
-            diff = abs(surrogate_bestfit[i] - mp_bestfit[i])
-            rel_diff = diff / abs(mp_bestfit[i]) * 100
+            diff = abs(surrogate_bestfit[i] - reference_bestfit[i])
+            rel_diff = diff / abs(reference_bestfit[i]) * 100
             map_diffs.append(diff)
             print(
                 f"{pname:<20} "
-                f"{surrogate_bestfit[i]:>12.4f} {mp_bestfit[i]:>12.4f} "
+                f"{surrogate_bestfit[i]:>12.4f} {reference_bestfit[i]:>12.4f} "
                 f"{diff:>10.4f} {rel_diff:>8.1f}"
             )
         
@@ -334,14 +376,14 @@ def print_diagnostics(samples, mp_samples, param_names, getdist_names, args, ite
         return "N/A"
     
     lookup_names = getdist_names
-    if mp_samples:
-        mp_stats = mp_samples.getMargeStats()
+    if reference_samples:
+        reference_stats = reference_samples.getMargeStats()
         print(f"{'Parameter':<20} {'Surr 68%':<22} {'True 68%':<22} {'Surr 95%':<22} {'True 95%':<22}")
         print("-" * 110)
         
         for pname, sname in zip(param_names, lookup_names):
             ps = surrogate_stats.parWithName(sname)
-            pt = mp_stats.parWithName(sname)
+            pt = reference_stats.parWithName(sname)
             s68, s95 = ps.limits[0] if ps is not None and ps.limits else None, ps.limits[1] if ps is not None and ps.limits else None
             t68, t95 = pt.limits[0] if pt is not None and pt.limits else None, pt.limits[1] if pt is not None and pt.limits else None
             print(f"{pname:<20} {fmt(s68):<22} {fmt(t68):<22} {fmt(s95):<22} {fmt(t95):<22}")
@@ -442,7 +484,10 @@ def main():
 
     output_dir = run_dir / 'benchmark_chains'
     output_dir.mkdir(exist_ok=True)
-    chain_path = output_dir / f'benchmark_chain_it_{iteration}.npz'
+    chain_path = output_dir / (
+        f'benchmark_chain_it_{iteration}_{sampler_name}_'
+        f'steps{args.n_steps}_thin{args.thin}.npz'
+    )
 
     if chain_path.exists():
         data = np.load(chain_path)
@@ -463,7 +508,7 @@ def main():
         initial_pos = np.random.uniform(
             low=lower,
             high=upper,
-            size=(n_walkers, len(param_names))
+            size=(n_chains, n_walkers, len(param_names))
         )
         sampler.run(initial_pos=initial_pos, max_steps=args.n_steps)
         chain = sampler.get_chain(discard=burn_in, thin=args.thin)
@@ -471,9 +516,10 @@ def main():
         np.savez(chain_path, chain=chain, log_prob=log_prob)
         print(f"Chain shape: {chain.shape}")
 
-    samples = MCSamples(samples=[chain[:, i, :] for i in range(chain.shape[1])],
+    getdist_samples, getdist_loglikes = getdist_chain_inputs(chain, log_prob)
+    samples = MCSamples(samples=getdist_samples,
                         names=getdist_names, labels=param_labels,
-                        loglikes=[-log_prob[:, i] for i in range(log_prob.shape[1])], 
+                        loglikes=getdist_loglikes,
                         ranges=getdist_ranges)
     
     if args.params:
@@ -486,7 +532,7 @@ def main():
     else:
         plot_params, param_indices = getdist_names, list(range(len(param_names)))
     
-    mp_samples = None
+    reference_samples = None
     chain_format = None
     if args.chains:
         try:
@@ -494,14 +540,14 @@ def main():
             print(f"Detected {chain_format} chain format")
             
             if chain_format == 'cobaya':
-                mp_samples_list, mp_loglikes_list = load_cobaya_chains(args.chains, param_names, thin=1)
+                reference_samples_list, reference_loglkls_list = load_cobaya_chains(args.chains, param_names, thin=1)
             else:
-                mp_samples_list, mp_loglikes_list = load_montepython_chains(
+                reference_samples_list, reference_loglkls_list = load_montepython_chains(
                     args.chains, param_names, thin=1, scales=scales)
             
-            mp_samples = MCSamples(samples=mp_samples_list, names=getdist_names, labels=param_labels,
-                                  loglikes=[-ll for ll in mp_loglikes_list], ranges=getdist_ranges)
-            print(f"Loaded {sum(len(s) for s in mp_samples_list)} samples from {chain_format} chains")
+            reference_samples = MCSamples(samples=reference_samples_list, names=getdist_names, labels=param_labels,
+                                         loglikes=[-ll for ll in reference_loglkls_list], ranges=getdist_ranges)
+            print(f"Loaded {sum(len(s) for s in reference_samples_list)} samples from {chain_format} chains")
         except Exception as e:
             print(f"Warning: Could not load chains: {e}")
     
@@ -511,10 +557,10 @@ def main():
         reference_sampler = chain_format
 
     log_file_path = run_dir / "benchmark_results" / f"{timestamp}_diagnostics_it_{iteration}.log"
-    log_file_path.parent.mkdir(exist_ok=True), surrogate
+    log_file_path.parent.mkdir(exist_ok=True)
     
     with TeeOutput(str(log_file_path)):
-        print_diagnostics(samples, mp_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate,
+        print_diagnostics(samples, reference_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate,
                          surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
     
     g = plots.get_subplot_plotter(width_inch=width_inches)
@@ -523,10 +569,10 @@ def main():
     g.settings.legend_fontsize = fontsize * 0.9
     g.settings.figure_legend_frame = False
     
-    plot_data = ([mp_samples, samples] if mp_samples else samples)
+    plot_data = ([reference_samples, samples] if reference_samples else samples)
     plot_args = ({"filled": False, "param_limits": {n: getdist_ranges[n] for n in plot_params}})
     
-    if mp_samples:
+    if reference_samples:
         plot_args.update({"line_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}],
                          "contour_args": [{"lw": 2, "color": "C1"}, {"lw": 2, "color": "C0"}]})
     else:
@@ -553,7 +599,7 @@ def main():
     surr_label = f'Surrogate ({surrogate_sampler})'
     
     legend_elements = [Line2D([0], [0], color='C0', lw=2, label=surr_label)]
-    if mp_samples:
+    if reference_samples:
         legend_elements.append(Line2D([0], [0], color='C1', lw=2, label=ref_label))
     if x_all is not None:
         legend_elements.append(Line2D([0], [0], marker='o', color='black', lw=0, ms=4, alpha=0.7, label='Training Data'))
