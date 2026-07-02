@@ -2,14 +2,14 @@ import time
 import argparse
 import numpy as np
 
-from config.run import Run
-from likelihood.base import build_likelihood
-from metrics.convergence import (
+from convergence.convergence import (
     build_convergence_metric,
     save_chain_summary,
     load_chain_summary,
 )
-from metrics.metrics_tracker import MetricsTracker
+from likelihood.base import build_likelihood
+from run.metrics import MetricsTracker
+from run.run import Run
 from sampling.prior_sampler import sample_prior
 from utils.mpi_utils import (
     is_mpi_available,
@@ -47,7 +47,7 @@ def main():
         metrics_tracker = MetricsTracker(
             run.run_dir,
             start_iteration=run.start_iteration,
-            preserve_start_training=run.reuse_initial_model,
+            preserve_start_metrics=run.reuse_start_model,
         )
         print_master(f"Run:     {run.run_id}  [{run.mode_label}]")
         print_master(f"Results: {run.run_dir}\n")
@@ -82,7 +82,7 @@ def main():
     # ---- Training data ----
     if run.is_continuation:
         if is_master():
-            from training.dataset import TrainingDataset
+            from data.dataset import TrainingDataset
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data,
                 likelihood=likelihood,
@@ -102,7 +102,7 @@ def main():
             description="initial samples",
         )
         if is_master():
-            from training.dataset import TrainingDataset
+            from data.dataset import TrainingDataset
             valid = np.isfinite(y_init)
             if (~valid).any():
                 print_master(f"  Warning: filtered {(~valid).sum()}/{len(y_init)} samples with non-finite log-lkl")
@@ -125,25 +125,48 @@ def main():
 
     surrogate = sampler = None
     metric = build_convergence_metric(config.convergence.metric)
-    prev_chain_summary = None
+    previous_chain_summary = None
+    reuse_start_chain_summary = False
     if is_master() and run.is_continuation and start_it > 0:
-        loaded = load_chain_summary(run.convergence_stats, start_it - 1)
-        if loaded is not None:
-            prev_chain_summary, prev_path = loaded
-            print_master(f"Loaded previous chain summary from {prev_path}")
+        if run.reuse_start_model:
+            loaded = load_chain_summary(run.convergence_stats, start_it)
+            if loaded is not None:
+                previous_chain_summary, previous_path = loaded
+                reuse_start_chain_summary = True
+                print_master(f"Loaded saved start-iteration chain summary from {previous_path}")
+
+        if previous_chain_summary is None:
+            loaded = load_chain_summary(run.convergence_stats, start_it - 1)
+            if loaded is not None:
+                previous_chain_summary, previous_path = loaded
+                print_master(f"Loaded previous chain summary from {previous_path}")
+
+    already_converged = False
+    if is_master() and run.reuse_start_model and use_convergence:
+        start_convergence = metrics_tracker.convergence_metrics.get(start_it)
+        if start_convergence and start_convergence.get('converged'):
+            already_converged = True
+            print_master(
+                f"Saved convergence metrics show iteration {start_it} already "
+                "converged; nothing to resume."
+            )
+
+    already_converged = bcast(already_converged)
+    if already_converged:
+        n_iterations = 0
 
     # ===== Main loop =====
     for iteration in range(start_it, start_it + n_iterations):
         t_iter          = time.time()
 
         if use_convergence:
-            print_master(f"\n--- Iteration {iteration} (max {run.last_iteration}) ---")
+            print_master(f"\n--- Iteration {iteration} (max {run.final_iteration}) ---")
         else:
-            print_master(f"\n--- Iteration {iteration}/{run.last_iteration} ---")
+            print_master(f"\n--- Iteration {iteration}/{run.final_iteration} ---")
 
         # -- Training --
         model_path = run.trained_models / f'trained_model_it_{iteration}.keras'
-        skip_train = (run.reuse_initial_model and iteration == start_it)
+        skip_train = (run.reuse_start_model and iteration == start_it)
 
         if not skip_train and is_master():
             from model.network import build_model
@@ -242,18 +265,30 @@ def main():
         converged = False
         if is_master():
             chain_summary = metric.summarise(chain)
-            save_chain_summary(run.convergence_stats, iteration, chain_summary)
+            skip_reused_start_convergence = (
+                reuse_start_chain_summary
+                and run.reuse_start_model
+                and iteration == start_it
+            )
 
-            if prev_chain_summary is not None:
-                metric_value = metric.compute_from_summary(chain, prev_chain_summary)
+            if skip_reused_start_convergence:
+                print_master(
+                    "  Skipping convergence check for reused start iteration "
+                    "(already summarised before resume)"
+                )
+            elif previous_chain_summary is not None:
+                save_chain_summary(run.convergence_stats, iteration, chain_summary)
+                metric_value = metric.compute_from_summary(chain, previous_chain_summary)
                 converged = metric_value < config.convergence.threshold
                 print_master(f"  {metric.name} = {metric_value:.6f}  (threshold: {config.convergence.threshold})")
                 metrics_tracker.add_convergence_metrics(iteration, metric_value, converged, metric_name=metric.name)
                 if use_convergence and converged:
                     print_master(f"\nConverged at iteration {iteration}!\n")
             else:
+                save_chain_summary(run.convergence_stats, iteration, chain_summary)
                 print_master("  R-1 not yet calculable (need >= 2 iterations)")
-            prev_chain_summary = chain_summary
+            if not skip_reused_start_convergence:
+                previous_chain_summary = chain_summary
 
         if use_convergence:
             converged = bcast(converged)
@@ -264,14 +299,14 @@ def main():
                 break
 
         # -- Resampling (skip on the last iteration) --
-        if iteration < run.last_iteration:
+        if iteration < run.final_iteration:
             t_resamp = time.time()
             n_before = len(dataset.inputs) if is_master() else None
 
             if is_master():
-                from training.acquisition import select_points
+                from data.acquisition import select_points
 
-            selected, log_L_selected = broadcast_and_evaluate(
+            candidate_points, candidate_loglkls = broadcast_and_evaluate(
                 lambda: select_points(
                     dataset=dataset,
                     chain=chain,
@@ -286,7 +321,17 @@ def main():
             )
 
             if is_master():
-                dataset.add_data(selected, log_L_selected)
+                n_evaluated = len(candidate_points)
+                valid = np.isfinite(candidate_loglkls)
+                if (~valid).any():
+                    print_master(
+                        f"  Warning: filtered {(~valid).sum()}/{n_evaluated} "
+                        "augmentation candidates with non-finite log-lkl"
+                    )
+                accepted_points = candidate_points[valid]
+                accepted_loglkls = candidate_loglkls[valid]
+
+                dataset.add_data(accepted_points, accepted_loglkls)
 
                 n_added     = len(dataset.inputs) - n_before
                 resamp_time = time.time() - t_resamp
@@ -296,7 +341,7 @@ def main():
                 metrics_tracker.add_resampling_metrics(
                     iteration=iteration,
                     pool_size=min(config.data.pool_factor * config.data.n_append, len(chain)),
-                    n_evaluated=len(selected),
+                    n_evaluated=n_evaluated,
                     n_added=n_added,
                     resampling_time=resamp_time,
                 )

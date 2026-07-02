@@ -6,11 +6,11 @@ from pathlib import Path
 class BaseConvergenceMetric(ABC):
     @abstractmethod
     def summarise(self, chain):
-        """chain: (n_samples, ndim) flat array. Returns a summary dict."""
+        """chain: (n_samples, ndim) flat array. Returns a chain summary dict."""
         pass
 
     @abstractmethod
-    def compute_from_summary(self, chain, prev_summary):
+    def compute_from_summary(self, chain, previous_chain_summary):
         """chain: (n_samples, ndim) flat array. Returns scalar metric value."""
         pass
 
@@ -45,12 +45,12 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
             "cov": np.atleast_2d(np.cov(chain, rowvar=False)),
         }
 
-    def compute_from_summary(self, chain, prev_summary):
+    def compute_from_summary(self, chain, previous_chain_summary):
         current = self.summarise(chain)
 
-        prev_mean = np.asarray(prev_summary["mean"], dtype=np.float64)
+        prev_mean = np.asarray(previous_chain_summary["mean"], dtype=np.float64)
         prev_cov = np.atleast_2d(
-            np.asarray(prev_summary["cov"], dtype=np.float64)
+            np.asarray(previous_chain_summary["cov"], dtype=np.float64)
         )
 
         if prev_mean.shape != current["mean"].shape:
@@ -143,10 +143,10 @@ def build_convergence_metric(name):
     return registry[name](name=name)
 
 
-def save_chain_summary(convergence_stats_dir, iteration, summary):
+def save_chain_summary(convergence_stats_dir, iteration, chain_summary):
     path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, **{k: np.asarray(v) for k, v in summary.items()})
+    np.savez(path, **{k: np.asarray(v) for k, v in chain_summary.items()})
     return path
 
 
@@ -155,5 +155,5 @@ def load_chain_summary(convergence_stats_dir, iteration):
     if not path.exists():
         return None
     with np.load(path) as data:
-        summary = {k: data[k] for k in data.files}
-    return summary, path
+        chain_summary = {k: data[k] for k in data.files}
+    return chain_summary, path

@@ -42,12 +42,12 @@ class IterationMetrics:
     resampling: Optional[ResamplingMetrics] = None
 
 class MetricsTracker:
-    def __init__(self, results_dir: str, start_iteration: int = 0, preserve_start_training: bool = False):
+    def __init__(self, results_dir: str, start_iteration: int = 0, preserve_start_metrics: bool = False):
         self.results_dir = Path(results_dir)
         self.metrics_file = self.results_dir / "metrics.log"
         self.metrics_json = self.results_dir / "metrics.json"
         self.start_iteration = start_iteration
-        self.preserve_start_training = preserve_start_training
+        self.preserve_start_metrics = preserve_start_metrics
         self.training_metrics = []
         self.sampling_metrics = []
         self.resampling_metrics = []
@@ -249,7 +249,7 @@ class MetricsTracker:
         with open(self.metrics_json, 'r') as f:
             data = json.load(f)
 
-        training_cut = (lambda it: it <= start_iteration) if self.preserve_start_training else (lambda it: it < start_iteration)
+        training_cut = (lambda it: it <= start_iteration) if self.preserve_start_metrics else (lambda it: it < start_iteration)
 
         self.training_metrics = [
             TrainingMetrics(**m) for m in data.get('training', [])
@@ -267,7 +267,12 @@ class MetricsTracker:
             IterationMetrics(**m) for m in data.get('iteration', [])
             if m['iteration'] < start_iteration
         ]
+        convergence_cut = (
+            (lambda it: it <= start_iteration)
+            if self.preserve_start_metrics
+            else (lambda it: it < start_iteration)
+        )
         self.convergence_metrics = {
             int(it): v for it, v in data.get('convergence', {}).items()
-            if int(it) < start_iteration
+            if convergence_cut(int(it))
         }

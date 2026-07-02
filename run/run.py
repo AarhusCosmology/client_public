@@ -4,7 +4,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from .config import Config
+
+from config.config import Config
 
 _SUBDIRS = (
     'likelihood_input',
@@ -22,7 +23,20 @@ class Run:
     is_continuation: bool
     retrain: bool
     start_iteration: int
-    iterations_override: Optional[int]  # explicit --iterations (None => use convergence)
+    requested_iterations: Optional[int]  # explicit --iterations (None => use convergence)
+
+    @staticmethod
+    def _iteration_numbers(directory: Path, pattern: str) -> list[int]:
+        if not directory.is_dir():
+            return []
+
+        iterations = []
+        for path in directory.glob(pattern):
+            try:
+                iterations.append(int(path.stem.split('_')[-1]))
+            except ValueError:
+                continue
+        return iterations
 
     @staticmethod
     def _resolve_continuation_likelihood_input(run_dir: Path, config: Config) -> Config:
@@ -68,14 +82,26 @@ class Run:
             config = cls._resolve_continuation_likelihood_input(run_dir, config)
 
             if args.start is None:
-                models = (run_dir / 'trained_models').glob('trained_model_it_*.keras')
-                iterations = [int(f.stem.split('_')[-1]) for f in models]
-                if not iterations:
+                model_iterations = cls._iteration_numbers(
+                    run_dir / 'trained_models',
+                    'trained_model_it_*.keras',
+                )
+                data_iterations = cls._iteration_numbers(
+                    run_dir / 'training_data',
+                    'training_data_it_*.csv',
+                )
+                if not model_iterations and not data_iterations:
                     raise FileNotFoundError(
-                        f"No trained models in {run_dir / 'trained_models'}; cannot continue."
+                        f"No training data or trained models in {run_dir}; cannot continue."
                     )
-                start_iteration = max(iterations)
-                print(f"Auto-detected latest iteration: {start_iteration}")
+
+                latest_model = max(model_iterations) if model_iterations else -1
+                latest_data = max(data_iterations) if data_iterations else -1
+                start_iteration = max(latest_model, latest_data)
+                if latest_data > latest_model:
+                    print(f"Auto-detected next untrained iteration: {start_iteration}")
+                else:
+                    print(f"Auto-detected latest trained iteration: {start_iteration}")
             else:
                 start_iteration = args.start
             run_id = run_dir.name
@@ -93,7 +119,7 @@ class Run:
             is_continuation=is_continuation,
             retrain=args.retrain,
             start_iteration=start_iteration,
-            iterations_override=args.iterations,
+            requested_iterations=args.iterations,
         )
 
     def create_directories(self, source_config):
@@ -128,21 +154,23 @@ class Run:
     # ---- Launch behaviour ----
     @property
     def use_convergence(self):
-        return self.iterations_override is None
+        return self.requested_iterations is None
 
     @property
-    def reuse_initial_model(self):
-        return self.is_continuation and not self.retrain
+    def reuse_start_model(self):
+        model_path = self.trained_models / f'trained_model_it_{self.start_iteration}.keras'
+        return self.is_continuation and not self.retrain and model_path.exists()
 
     @property
     def n_iterations(self):
-        if self.iterations_override is None:
+        if self.requested_iterations is None:
             return self.config.convergence.max_iterations
-        # Continuations get one extra so the reused-model iteration isn't counted.
-        return self.iterations_override + (1 if self.is_continuation else 0)
+        # When reusing the starting model, that sampling/resampling pass is
+        # preparatory and should not count against requested additional models.
+        return self.requested_iterations + (1 if self.reuse_start_model else 0)
 
     @property
-    def last_iteration(self):
+    def final_iteration(self):
         return self.start_iteration + self.n_iterations - 1
 
     @property
