@@ -172,10 +172,11 @@ def detect_chain_format(chain_dir):
         return 'montepython'
 
 
-def getdist_chain_inputs(chain, log_prob):
-    """Convert sampler output into GetDist's list-of-independent-chains format."""
+def getdist_sample_inputs(chain, log_prob, sampler_name):
+    """Convert sampler output into GetDist input arrays."""
     chain = np.asarray(chain)
     log_prob = np.asarray(log_prob)
+    sampler_name = str(sampler_name).lower()
 
     if chain.ndim == 4:
         # AIES: (n_steps, n_chains, n_walkers, ndim)
@@ -184,24 +185,32 @@ def getdist_chain_inputs(chain, log_prob):
                 f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
             )
         samples = [
-            chain[:, chain_idx, :, :].reshape(-1, chain.shape[-1])
+            chain[:, chain_idx, walker_idx, :]
             for chain_idx in range(chain.shape[1])
+            for walker_idx in range(chain.shape[2])
         ]
         loglikes = [
-            -log_prob[:, chain_idx, :].reshape(-1)
+            -log_prob[:, chain_idx, walker_idx]
             for chain_idx in range(chain.shape[1])
+            for walker_idx in range(chain.shape[2])
         ]
-        return samples, loglikes
+        return samples, loglikes, len(samples) > 1
 
     if chain.ndim == 3:
-        # Non-ensemble samplers: (n_steps, n_chains, ndim)
         if log_prob.shape != chain.shape[:-1]:
             raise ValueError(
                 f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
             )
+        if sampler_name == 'aies':
+            # Legacy AIES cache shape: (n_steps, n_walkers, ndim).
+            samples = [chain[:, walker_idx, :] for walker_idx in range(chain.shape[1])]
+            loglikes = [-log_prob[:, walker_idx] for walker_idx in range(log_prob.shape[1])]
+            return samples, loglikes, len(samples) > 1
+
+        # Non-ensemble samplers: (n_steps, n_chains, ndim)
         samples = [chain[:, chain_idx, :] for chain_idx in range(chain.shape[1])]
         loglikes = [-log_prob[:, chain_idx] for chain_idx in range(chain.shape[1])]
-        return samples, loglikes
+        return samples, loglikes, len(samples) > 1
 
     if chain.ndim == 2:
         # Already flattened output from older cache files.
@@ -209,12 +218,12 @@ def getdist_chain_inputs(chain, log_prob):
             raise ValueError(
                 f"log_prob shape {log_prob.shape} is incompatible with chain shape {chain.shape}"
             )
-        return [chain], [-log_prob]
+        return chain, -log_prob, False
 
     raise ValueError(f"Unexpected chain shape {chain.shape}")
 
 
-def print_diagnostics(samples, reference_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None):
+def print_diagnostics(samples, reference_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate=None, surrogate_sampler='ensemble', reference_sampler=None, surrogate_convergence_available=True):
     print(f"=== BENCHMARK DIAGNOSTICS - ITERATION {iteration} ===")
     print(f"Configuration: {config_yaml}")
     print(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -230,23 +239,27 @@ def print_diagnostics(samples, reference_samples, param_names, getdist_names, ar
     print("=" * 70)
     
     print(f"\n=== Convergence Diagnostics (Surrogate - {surrogate_sampler}) ===")
-    try:
-        surrogate_gr = samples.getGelmanRubin()
-        print(f"Gelman-Rubin statistic: {surrogate_gr:.4f}")
-        if surrogate_gr > 1.1:
-            print("  WARNING: Gelman-Rubin > 1.1, chain may not be converged!")
-        print("\nWARNING: Gelman-Rubin diagnostic is not reliable with the ensemble")
-        print("         ensemble sampler as walkers are not independent chains.")
-    except Exception as e:
-        print(f"Gelman-Rubin statistic: N/A ({e})")
-    
-    print(f"\nEffective sample sizes:")
-    for i, pname in enumerate(param_names):
+    if not surrogate_convergence_available:
+        print("N/A: fewer than two surrogate chain blocks are available.")
+    else:
         try:
-            ess = samples.getEffectiveSamples(i)
-            print(f"  {pname}: {ess:.0f}")
+            surrogate_gr = samples.getGelmanRubin()
+            print(f"Gelman-Rubin statistic: {surrogate_gr:.4f}")
+            if surrogate_gr > 1.1:
+                print("  WARNING: Gelman-Rubin > 1.1, chain may not be converged!")
+            if str(surrogate_sampler).lower() == 'aies':
+                print("\nWARNING: Gelman-Rubin diagnostic is not reliable with the AIES")
+                print("         ensemble sampler as walkers are not independent chains.")
         except Exception as e:
-            print(f"  {pname}: N/A ({e})")
+            print(f"Gelman-Rubin statistic: N/A ({e})")
+
+        print(f"\nEffective sample sizes:")
+        for i, pname in enumerate(param_names):
+            try:
+                ess = samples.getEffectiveSamples(i)
+                print(f"  {pname}: {ess:.0f}")
+            except Exception as e:
+                print(f"  {pname}: N/A ({e})")
     
     if reference_samples:
         ref_label = f"Reference ({reference_sampler})" if reference_sampler else "Reference/True Chains"
@@ -516,7 +529,11 @@ def main():
         np.savez(chain_path, chain=chain, log_prob=log_prob)
         print(f"Chain shape: {chain.shape}")
 
-    getdist_samples, getdist_loglikes = getdist_chain_inputs(chain, log_prob)
+    getdist_samples, getdist_loglikes, surrogate_convergence_available = getdist_sample_inputs(
+        chain,
+        log_prob,
+        sampler_name,
+    )
     samples = MCSamples(samples=getdist_samples,
                         names=getdist_names, labels=param_labels,
                         loglikes=getdist_loglikes,
@@ -561,7 +578,8 @@ def main():
     
     with TeeOutput(str(log_file_path)):
         print_diagnostics(samples, reference_samples, param_names, getdist_names, args, iteration, config_yaml, run_dir, surrogate,
-                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler)
+                         surrogate_sampler=surrogate_sampler, reference_sampler=reference_sampler,
+                         surrogate_convergence_available=surrogate_convergence_available)
     
     g = plots.get_subplot_plotter(width_inch=width_inches)
     g.settings.axes_fontsize = fontsize
