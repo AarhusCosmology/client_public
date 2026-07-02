@@ -293,6 +293,23 @@ if [ -n "$MONTEPYTHON_PATH" ]; then
         
         cd clik
 
+        # Ensure astropy is available for Planck likelihood helper scripts
+        if python_package_exists astropy; then
+            print_success "astropy found in active environment."
+        else
+            print_warning "astropy not found. Planck likelihood tooling may require it."
+            if prompt_yes_no "Install astropy via conda (recommended)?" "y"; then
+                conda install -y -c conda-forge astropy
+                if python_package_exists astropy; then
+                    print_success "astropy installed successfully."
+                else
+                    print_warning "astropy installation may have failed. Continuing anyway."
+                fi
+            else
+                print_info "Skipping astropy installation."
+            fi
+        fi
+
         # Detect cfitsio and optionally install via conda
         CFITSIO_PREFIX=""
         if [ -f "${CONDA_PREFIX}/lib/libcfitsio.so" ] || [ -f "${CONDA_PREFIX}/lib/libcfitsio.a" ]; then
