@@ -17,7 +17,7 @@ class LikelihoodConfig:
 @dataclass(frozen=True)
 class DataConfig:
     n_initial: int
-    n_sigma: float
+    n_sigma: float | None
     n_append: int
     n_neighbors: int
     target_temperature: float
@@ -25,9 +25,10 @@ class DataConfig:
 
     @classmethod
     def from_dict(cls, d):
+        n_sigma = d.get('n_sigma')
         return cls(
             n_initial=int(d['n_initial']),
-            n_sigma=float(d['n_sigma']),
+            n_sigma=None if n_sigma is None else float(n_sigma),
             n_append=int(d['n_append']),
             n_neighbors=int(d['n_neighbors']),
             target_temperature=float(d['target_temperature']),
