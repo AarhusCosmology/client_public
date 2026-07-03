@@ -34,9 +34,9 @@ def train_model(model, inputs, targets, loss, learning_rate, n_epochs,
             key=lambda i: history.history['val_loss'][i],
         )
         metrics = {
-            'best_epoch': best_epoch_idx + 1,
-            'best_train_loss': float(history.history['loss'][best_epoch_idx]),
-            'best_val_loss': float(history.history['val_loss'][best_epoch_idx]),
+            'epoch': best_epoch_idx + 1,
+            'train_loss': float(history.history['loss'][best_epoch_idx]),
+            'val_loss': float(history.history['val_loss'][best_epoch_idx]),
             'training_time': time.time() - start_time,
         }
         return history, metrics

@@ -340,16 +340,15 @@ def main():
                 dataset.add_data(accepted_points, accepted_loglkls)
 
                 n_added     = len(dataset.inputs) - n_before
-                resamp_time = time.time() - t_resamp
+                acq_time = time.time() - t_resamp
 
-                print_master(f"  Resampling: +{n_added} points in {resamp_time:.1f}s")
+                print_master(f"  Acquisition: +{n_added} points in {acq_time:.1f}s")
                 dataset.save(run.training_data / f'training_data_it_{iteration + 1}.csv')
-                metrics_tracker.add_resampling_metrics(
+                metrics_tracker.add_acquisition_metrics(
                     iteration=iteration,
-                    pool_size=min(config.data.pool_factor * config.data.n_append, len(chain)),
                     n_evaluated=n_evaluated,
                     n_added=n_added,
-                    resampling_time=resamp_time,
+                    acquisition_time=acq_time,
                 )
 
         if is_master():

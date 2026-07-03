@@ -8,9 +8,9 @@ from datetime import datetime
 @dataclass
 class TrainingMetrics:
     iteration: int
-    best_epoch: int
-    best_train_loss: float
-    best_val_loss: float
+    epoch: int
+    train_loss: float
+    val_loss: float
     training_time: float
     
 @dataclass
@@ -21,12 +21,11 @@ class SamplingMetrics:
     sampling_time: float
     
 @dataclass 
-class ResamplingMetrics:
+class AcquisitionMetrics:
     iteration: int
-    pool_size: int        # IS pool drawn from chain
     n_evaluated: int      # candidates sent for true likelihood eval
     n_added: int          # points with finite log-L added to dataset
-    resampling_time: float
+    acquisition_time: float
     acceptance_rate: float = 0.0
     
     def __post_init__(self):
@@ -39,7 +38,7 @@ class IterationMetrics:
     total_iteration_time: float
     training: Optional[TrainingMetrics] = None
     sampling: Optional[SamplingMetrics] = None
-    resampling: Optional[ResamplingMetrics] = None
+    acquisition: Optional[AcquisitionMetrics] = None
 
 class MetricsTracker:
     def __init__(self, results_dir: str, start_iteration: int = 0, preserve_start_metrics: bool = False):
@@ -50,7 +49,7 @@ class MetricsTracker:
         self.preserve_start_metrics = preserve_start_metrics
         self.training_metrics = []
         self.sampling_metrics = []
-        self.resampling_metrics = []
+        self.acquisition_metrics = []
         self.iteration_metrics = []
         self.convergence_metrics = {}
         
@@ -65,11 +64,11 @@ class MetricsTracker:
                 return
         metrics_list.append(metric)
     
-    def add_training_metrics(self, iteration: int, best_epoch: int,
-                           best_train_loss: float, best_val_loss: float,
+    def add_training_metrics(self, iteration: int, epoch: int,
+                           train_loss: float, val_loss: float,
                            training_time: float) -> None:
         self._upsert_metric(self.training_metrics, TrainingMetrics(
-            iteration, best_epoch, best_train_loss, best_val_loss, training_time
+            iteration, epoch, train_loss, val_loss, training_time
         ))
     
     def add_sampling_metrics(self, iteration: int, steps_per_walker: int,
@@ -78,20 +77,20 @@ class MetricsTracker:
             iteration, steps_per_walker, acceptance_rate, sampling_time
         ))
     
-    def add_resampling_metrics(self, iteration: int, pool_size: int,
-                             n_evaluated: int, n_added: int,
-                             resampling_time: float) -> None:
-        self._upsert_metric(self.resampling_metrics, ResamplingMetrics(
-            iteration, pool_size, n_evaluated, n_added, resampling_time
+    def add_acquisition_metrics(self, iteration: int,
+                              n_evaluated: int, n_added: int,
+                              acquisition_time: float) -> None:
+        self._upsert_metric(self.acquisition_metrics, AcquisitionMetrics(
+            iteration, n_evaluated, n_added, acquisition_time
         ))
     
     def add_iteration_metrics(self, iteration: int, total_iteration_time: float) -> None:
         training = next((m for m in self.training_metrics if m.iteration == iteration), None)
         sampling = next((m for m in self.sampling_metrics if m.iteration == iteration), None)
-        resampling = next((m for m in self.resampling_metrics if m.iteration == iteration), None)
+        acquisition = next((m for m in self.acquisition_metrics if m.iteration == iteration), None)
 
         self._upsert_metric(self.iteration_metrics, IterationMetrics(
-            iteration, total_iteration_time, training, sampling, resampling
+            iteration, total_iteration_time, training, sampling, acquisition
         ))
     
     def add_convergence_metrics(self, iteration: int, metric_value: float, converged: bool, metric_name: str = "metric") -> None:
@@ -119,18 +118,18 @@ class MetricsTracker:
         
         f.write("Training Metrics:\n")
         f.write("-" * 54 + "\n")
-        f.write(f"{'it':<3} | {'best_ep':<7} | {'best_loss':<10} | {'best_val':<10} | {'time':<6}\n")
+        f.write(f"{'it':<3} | {'epoch':<7} | {'train_loss':<10} | {'val_loss':<10} | {'time':<6}\n")
         f.write("-" * 54 + "\n")
         
         for m in sorted(self.training_metrics, key=lambda x: x.iteration):
-            f.write(f"{m.iteration:<3} | {m.best_epoch:<7} | {m.best_train_loss:<10.6f} | {m.best_val_loss:<10.6f} | {m.training_time/60:<6.2f}\n")
+            f.write(f"{m.iteration:<3} | {m.epoch:<7} | {m.train_loss:<10.6f} | {m.val_loss:<10.6f} | {m.training_time/60:<6.2f}\n")
         
         f.write("-" * 54 + "\n")
-        avg_best_epoch = sum(m.best_epoch for m in self.training_metrics) / len(self.training_metrics)
-        avg_best_loss = sum(m.best_train_loss for m in self.training_metrics) / len(self.training_metrics)
-        avg_best_val_loss = sum(m.best_val_loss for m in self.training_metrics) / len(self.training_metrics)
+        avg_epoch = sum(m.epoch for m in self.training_metrics) / len(self.training_metrics)
+        avg_train_loss = sum(m.train_loss for m in self.training_metrics) / len(self.training_metrics)
+        avg_val_loss = sum(m.val_loss for m in self.training_metrics) / len(self.training_metrics)
         avg_time = sum(m.training_time for m in self.training_metrics) / len(self.training_metrics)
-        f.write(f"{'avg':<3} | {avg_best_epoch:<7.1f} | {avg_best_loss:<10.6f} | {avg_best_val_loss:<10.6f} | {avg_time/60:<6.2f}\n")
+        f.write(f"{'avg':<3} | {avg_epoch:<7.1f} | {avg_train_loss:<10.6f} | {avg_val_loss:<10.6f} | {avg_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_sampling_metrics(self, f):
@@ -152,24 +151,23 @@ class MetricsTracker:
         f.write(f"{'avg':<3} | {avg_steps:<7.0f} | {avg_ar:<6.3f} | {avg_time/60:<6.2f}\n")
         f.write("\n\n")
     
-    def _write_resampling_metrics(self, f):
-        if not self.resampling_metrics:
+    def _write_acquisition_metrics(self, f):
+        if not self.acquisition_metrics:
             return
         
-        f.write("Resampling Metrics:\n")
-        f.write("-" * 46 + "\n")
-        f.write(f"{'it':<3} | {'pool':<6} | {'candidates':<10} | {'accepted':<8} | {'time':<6}\n")
-        f.write("-" * 46 + "\n")
+        f.write("Acquisition Metrics:\n")
+        f.write("-" * 40 + "\n")
+        f.write(f"{'it':<3} | {'evaluated':<10} | {'added':<8} | {'time':<6}\n")
+        f.write("-" * 40 + "\n")
         
-        for m in sorted(self.resampling_metrics, key=lambda x: x.iteration):
-            f.write(f"{m.iteration:<3} | {m.pool_size:<6} | {m.n_evaluated:<10} | {m.n_added:<8} | {m.resampling_time/60:<6.2f}\n")
+        for m in sorted(self.acquisition_metrics, key=lambda x: x.iteration):
+            f.write(f"{m.iteration:<3} | {m.n_evaluated:<10} | {m.n_added:<8} | {m.acquisition_time/60:<6.2f}\n")
         
-        f.write("-" * 46 + "\n")
-        tot_pool = sum(m.pool_size for m in self.resampling_metrics)
-        tot_evaluated = sum(m.n_evaluated for m in self.resampling_metrics)
-        tot_added = sum(m.n_added for m in self.resampling_metrics)
-        tot_time = sum(m.resampling_time for m in self.resampling_metrics)
-        f.write(f"{'tot':<3} | {tot_pool:<6} | {tot_evaluated:<10} | {tot_added:<8} | {tot_time/60:<6.2f}\n")
+        f.write("-" * 40 + "\n")
+        tot_evaluated = sum(m.n_evaluated for m in self.acquisition_metrics)
+        tot_added = sum(m.n_added for m in self.acquisition_metrics)
+        tot_time = sum(m.acquisition_time for m in self.acquisition_metrics)
+        f.write(f"{'tot':<3} | {tot_evaluated:<10} | {tot_added:<8} | {tot_time/60:<6.2f}\n")
         f.write("\n\n")
     
     def _write_iteration_metrics(self, f):
@@ -178,27 +176,27 @@ class MetricsTracker:
         
         f.write("Per-Iteration Runtime:\n")
         f.write("-" * 54 + "\n")
-        f.write(f"{'it':<3} | {'total':<7} | {'training':<9} | {'sampling':<9} | {'resampling':<11}\n")
+        f.write(f"{'it':<3} | {'total':<7} | {'training':<9} | {'sampling':<9} | {'acquisition':<11}\n")
         f.write("-" * 54 + "\n")
         
         training_by_it = {m.iteration: m.training_time for m in self.training_metrics}
         sampling_by_it = {m.iteration: m.sampling_time for m in self.sampling_metrics}
-        resampling_by_it = {m.iteration: m.resampling_time for m in self.resampling_metrics}
+        acquisition_by_it = {m.iteration: m.acquisition_time for m in self.acquisition_metrics}
 
         for iter_metrics in sorted(self.iteration_metrics, key=lambda x: x.iteration):
             training_time = training_by_it.get(iter_metrics.iteration, 0.0) / 60
             sampling_time = sampling_by_it.get(iter_metrics.iteration, 0.0) / 60
-            resampling_time = resampling_by_it.get(iter_metrics.iteration, 0.0) / 60
+            acquisition_time = acquisition_by_it.get(iter_metrics.iteration, 0.0) / 60
             total_time = iter_metrics.total_iteration_time / 60
 
-            f.write(f"{iter_metrics.iteration:<3} | {total_time:<7.2f} | {training_time:<9.2f} | {sampling_time:<9.2f} | {resampling_time:<11.2f}\n")
+            f.write(f"{iter_metrics.iteration:<3} | {total_time:<7.2f} | {training_time:<9.2f} | {sampling_time:<9.2f} | {acquisition_time:<11.2f}\n")
         
         f.write("-" * 54 + "\n")
         tot_total = sum(iter_metrics.total_iteration_time for iter_metrics in self.iteration_metrics) / 60
         tot_training = sum(training_by_it.get(iter_metrics.iteration, 0.0) for iter_metrics in self.iteration_metrics) / 60
         tot_sampling = sum(sampling_by_it.get(iter_metrics.iteration, 0.0) for iter_metrics in self.iteration_metrics) / 60
-        tot_resampling = sum(resampling_by_it.get(iter_metrics.iteration, 0.0) for iter_metrics in self.iteration_metrics) / 60
-        f.write(f"{'tot':<3} | {tot_total:<7.2f} | {tot_training:<9.2f} | {tot_sampling:<9.2f} | {tot_resampling:<11.2f}\n")
+        tot_acquisition = sum(acquisition_by_it.get(iter_metrics.iteration, 0.0) for iter_metrics in self.iteration_metrics) / 60
+        f.write(f"{'tot':<3} | {tot_total:<7.2f} | {tot_training:<9.2f} | {tot_sampling:<9.2f} | {tot_acquisition:<11.2f}\n")
     
     def _write_convergence_metrics(self, f):
         if not self.convergence_metrics:
@@ -227,7 +225,7 @@ class MetricsTracker:
             self._write_header(f)
             self._write_training_metrics(f)
             self._write_sampling_metrics(f)
-            self._write_resampling_metrics(f)
+            self._write_acquisition_metrics(f)
             self._write_convergence_metrics(f)
             self._write_iteration_metrics(f)
 
@@ -235,7 +233,7 @@ class MetricsTracker:
         data = {
             'training': [asdict(m) for m in sorted(self.training_metrics, key=lambda x: x.iteration)],
             'sampling': [asdict(m) for m in sorted(self.sampling_metrics, key=lambda x: x.iteration)],
-            'resampling': [asdict(m) for m in sorted(self.resampling_metrics, key=lambda x: x.iteration)],
+            'acquisition': [asdict(m) for m in sorted(self.acquisition_metrics, key=lambda x: x.iteration)],
             'iteration': [
                 {'iteration': m.iteration, 'total_iteration_time': m.total_iteration_time}
                 for m in sorted(self.iteration_metrics, key=lambda x: x.iteration)
@@ -259,8 +257,8 @@ class MetricsTracker:
             SamplingMetrics(**m) for m in data.get('sampling', [])
             if m['iteration'] < start_iteration
         ]
-        self.resampling_metrics = [
-            ResamplingMetrics(**m) for m in data.get('resampling', [])
+        self.acquisition_metrics = [
+            AcquisitionMetrics(**m) for m in data.get('acquisition', [])
             if m['iteration'] < start_iteration
         ]
         self.iteration_metrics = [
