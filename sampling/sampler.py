@@ -35,6 +35,8 @@ class BestInferenceSampler:
         self.n_chains   = n_chains
         self.ndim       = ndim
         self.method     = method
+        if bounds is not None:
+            bounds = tuple(np.asarray(bound, dtype=np.float32) for bound in bounds)
         self._sampler   = best.Sampler(logpost_fn, bounds=bounds, enforce_boundaries=False)
         self._chain     = None
         self._log_prob  = None
@@ -45,7 +47,7 @@ class BestInferenceSampler:
         # initial_pos: (n_chains, n_walkers, ndim). 'aies' uses the full ensemble
         # structure; the other methods take one walker per replica (n independent
         # chains), since n_walkers is meaningful only for 'aies'.
-        initial_pos = np.asarray(initial_pos)
+        initial_pos = np.asarray(initial_pos, dtype=np.float32)
         if self.method == 'aies':
             initial_state = initial_pos
             n_walkers = self.n_walkers
@@ -53,7 +55,7 @@ class BestInferenceSampler:
             initial_state = initial_pos[:, 0, :]
             n_walkers = None
         results = self._sampler.sample(
-            initial_state=tf.cast(initial_state, dtype=tf.float32),
+            initial_state=tf.convert_to_tensor(initial_state, dtype=tf.float32),
             method=self.method,
             n_steps=max_steps,
             n_chains=self.n_chains,
@@ -63,8 +65,8 @@ class BestInferenceSampler:
         )
         # aies:  samples (n_steps, n_chains, n_walkers, ndim)
         # other: samples (n_steps, n_chains, ndim)
-        self._chain    = results.samples.numpy()
-        self._log_prob = results.log_prob.numpy()
+        self._chain    = np.asarray(results.samples.numpy(), dtype=np.float32)
+        self._log_prob = np.asarray(results.log_prob.numpy(), dtype=np.float32)
         self._n_steps  = max_steps
         self._accept   = float(results.acceptance_rate)
 

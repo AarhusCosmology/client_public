@@ -109,8 +109,8 @@ def main():
                 x_init, y_init = x_init[valid], y_init[valid]
             print_master(f"  Done in {time.time() - t0:.1f}s\n")
             dataset = TrainingDataset(
-                inputs=x_init.astype(np.float32),
-                targets=y_init.reshape(-1, 1).astype(np.float32),
+                inputs=x_init,
+                targets=y_init.reshape(-1, 1),
                 likelihood=likelihood,
                 n_neighbors=config.data.n_neighbors,
                 target_temperature=config.data.target_temperature,
@@ -310,7 +310,7 @@ def main():
                 lambda: select_points(
                     dataset=dataset,
                     chain=chain,
-                    logposts=logposts.astype(np.float64),
+                    logposts=logposts,
                     surrogate=surrogate,
                     n_append=config.data.n_append,
                     mcmc_temperature=config.sampling.temperature,

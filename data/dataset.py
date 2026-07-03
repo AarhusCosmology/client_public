@@ -40,14 +40,14 @@ class _WhitenedKNN:
     
 class TrainingDataset:
     def __init__(self, inputs, targets, likelihood, n_neighbors, target_temperature):
-        self.inputs = inputs.copy()
-        self.targets = targets.copy()
+        self.inputs = np.asarray(inputs, dtype=np.float32).copy()
+        self.targets = np.asarray(targets, dtype=np.float32).reshape(-1, 1).copy()
         self.likelihood = likelihood
         self.param_names = likelihood.get_param_names()
         self.n_neighbors = n_neighbors
         self.target_temperature = target_temperature
         self.iteration = None
-        self._knn_index = _WhitenedKNN(inputs, n_neighbors)
+        self._knn_index = _WhitenedKNN(self.inputs, n_neighbors)
 
     @property
     def knn_index(self):
@@ -70,14 +70,15 @@ class TrainingDataset:
         path = Path(training_data_dir) / f'training_data_it_{iteration}.csv'
         df = pd.read_csv(path)
         param_names = likelihood.get_param_names()
-        inputs = df[param_names].to_numpy()
-        targets = df[['loglkl']].to_numpy()
+        inputs = df[param_names].to_numpy(dtype=np.float32)
+        targets = df[['loglkl']].to_numpy(dtype=np.float32)
         dataset = cls(inputs, targets, likelihood, n_neighbors, target_temperature)
         dataset.iteration = iteration
         return dataset
     
     def add_data(self, inputs, targets):
-        targets = np.asarray(targets).reshape(-1, 1)
+        inputs = np.asarray(inputs, dtype=np.float32)
+        targets = np.asarray(targets, dtype=np.float32).reshape(-1, 1)
         self.inputs = np.concatenate([self.inputs, inputs])
         self.targets = np.concatenate([self.targets, targets])
         self._knn_index = _WhitenedKNN(self.inputs, self.n_neighbors)
