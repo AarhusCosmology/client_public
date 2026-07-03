@@ -82,7 +82,7 @@ def main():
     # ---- Training data ----
     if run.is_continuation:
         if is_master():
-            from data.dataset import TrainingDataset
+            from dataset.dataset import TrainingDataset
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data,
                 likelihood=likelihood,
@@ -102,7 +102,7 @@ def main():
             description="initial samples",
         )
         if is_master():
-            from data.dataset import TrainingDataset
+            from dataset.dataset import TrainingDataset
             valid = np.isfinite(y_init)
             if (~valid).any():
                 print_master(f"  Warning: filtered {(~valid).sum()}/{len(y_init)} samples with non-finite log-lkl")
@@ -305,7 +305,7 @@ def main():
             n_before = len(dataset.inputs) if is_master() else None
 
             if is_master():
-                from data.acquisition import select_points
+                from dataset.acquisition import select_points
 
             candidate_points, candidate_loglkls = broadcast_and_evaluate(
                 lambda: select_points(
