@@ -244,10 +244,11 @@ def main():
                 max_steps=config.sampling.max_steps,
             )
 
-            chain      = sampler.get_chain(discard=config.sampling.burn_in, flat=True).copy()
-            logposts   = sampler.get_logpost(discard=config.sampling.burn_in, flat=True).copy()
+            chain      = sampler.get_chain(discard=config.sampling.burn_in, flat=True)
+            logposts   = sampler.get_logpost(discard=config.sampling.burn_in, flat=True)
             acceptance = sampler.get_acceptance_fraction()
-            # Free the raw chain immediately — it's 2+ GB and no longer needed.
+            # Drop sampler references; chain/logposts keep the backing arrays alive
+            # as views without forcing another full-chain copy.
             sampler.free_memory()
 
             sampling_time = time.time() - t_sample

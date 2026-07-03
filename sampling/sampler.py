@@ -65,10 +65,10 @@ class BestInferenceSampler:
         )
         # aies:  samples (n_steps, n_chains, n_walkers, ndim)
         # other: samples (n_steps, n_chains, ndim)
-        self._chain    = np.asarray(results.samples.numpy(), dtype=np.float32)
-        self._log_prob = np.asarray(results.log_prob.numpy(), dtype=np.float32)
+        self._chain    = np.asarray(results.samples, dtype=np.float32)
+        self._log_prob = np.asarray(results.log_prob, dtype=np.float32)
         self._n_steps  = max_steps
-        self._accept   = float(results.acceptance_rate)
+        self._accept   = float(np.asarray(results.acceptance_rate))
 
     def get_chain(self, flat=False, discard=0, thin=1):
         chain = self._chain[discard::thin]
