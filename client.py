@@ -2,14 +2,7 @@ import time
 import argparse
 import numpy as np
 
-from convergence.convergence import (
-    build_convergence_metric,
-    save_chain_summary,
-    load_chain_summary,
-)
 from likelihood.base import build_likelihood
-from run.metrics import MetricsTracker
-from run.run import Run
 from sampling.prior_sampler import sample_prior
 from utils.mpi_utils import (
     is_mpi_available,
@@ -41,6 +34,9 @@ def main():
 
     # ---- Configuration (master loads the run, then bcasts it to workers) ----
     if is_master():
+        from run.run import Run
+        from run.metrics import MetricsTracker
+
         run = Run.from_args(args)
         if not run.is_continuation:
             run.create_directories(args.input_or_dir)
@@ -124,7 +120,16 @@ def main():
     use_convergence = run.use_convergence
 
     surrogate = sampler = None
-    metric = build_convergence_metric(config.convergence.metric)
+    if is_master():
+        from convergence.convergence import (
+            build_convergence_metric,
+            save_chain_summary,
+            load_chain_summary,
+        )
+        metric = build_convergence_metric(config.convergence.metric)
+    else:
+        metric = None
+
     previous_chain_summary = None
     reuse_start_chain_summary = False
     if is_master() and run.is_continuation and start_it > 0:
