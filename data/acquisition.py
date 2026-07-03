@@ -16,18 +16,17 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
     # log w_i ∝ (1/T - 1/T_MC) * loglkls_i
     # Since logposts = 1/T_MC * loglkls, we have
     # log w_i ∝ (T_MC/T - 1) * logposts_i
-    log_weights_raw = (mcmc_temperature / target_temperature - 1.0) * logposts
+    log_weight_coeff = mcmc_temperature / target_temperature - 1.0
 
     # Collapse exact duplicate MCMC states, but preserve their total probability mass
-    chain_unique, first_idx, inverse, counts = np.unique(
+    chain_unique, first_idx, counts = np.unique(
         chain,
         axis=0,
         return_index=True,
-        return_inverse=True,
         return_counts=True,
     )
     logposts_unique = logposts[first_idx]
-    log_weights_unique = log_weights_raw[first_idx] + np.log(counts)
+    log_weights_unique = log_weight_coeff * logposts_unique + np.log(counts)
 
     # Calculate and print the deduplication statistics
     n_duplicates = len(chain) - len(chain_unique)
