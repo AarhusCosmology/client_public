@@ -58,8 +58,8 @@ def main():
     # ---- Likelihood ----
     print_master("Initialising likelihood...")
     likelihood = build_likelihood(config.likelihood.wrapper, config.likelihood.input)
-    if config.data.n_sigma is not None:
-        likelihood.restrict_prior_bounds(n_sigma=config.data.n_sigma)
+    if config.prior.n_sigma is not None:
+        likelihood.restrict_prior_bounds(n_sigma=config.prior.n_sigma)
     param_names  = likelihood.get_param_names()
     prior_bounds = likelihood.get_prior_bounds()
     ndim         = len(param_names)
@@ -82,18 +82,25 @@ def main():
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data,
                 likelihood=likelihood,
-                n_neighbors=config.data.n_neighbors,
-                target_temperature=config.data.target_temperature,
+                n_neighbors=config.acquisition.n_neighbors,
+                target_temperature=config.acquisition.target_temperature,
                 iteration=start_it,
             )
             print_master(f"Loaded {len(dataset.inputs)} training points (iteration {start_it}).\n")
         else:
             dataset = None
     else:
-        print_master(f"Generating and evaluating {config.data.n_initial} initial samples via Latin hypercube...")
+        print_master(
+            f"Generating and evaluating {config.prior.n_samples} initial samples "
+            f"via {config.prior.sampling_strategy} sampling..."
+        )
         t0 = time.time()
         x_init, y_init = broadcast_and_evaluate(
-            lambda: sample_prior(likelihood=likelihood, n_samples=config.data.n_initial, strategy='lhs'),
+            lambda: sample_prior(
+                likelihood=likelihood,
+                n_samples=config.prior.n_samples,
+                strategy=config.prior.sampling_strategy,
+            ),
             loglkl_fn,
             description="initial samples",
         )
@@ -108,8 +115,8 @@ def main():
                 inputs=x_init,
                 targets=y_init.reshape(-1, 1),
                 likelihood=likelihood,
-                n_neighbors=config.data.n_neighbors,
-                target_temperature=config.data.target_temperature,
+                n_neighbors=config.acquisition.n_neighbors,
+                target_temperature=config.acquisition.target_temperature,
             )
             dataset.save(run.training_data / 'training_data_it_0.csv')
         else:
@@ -318,9 +325,9 @@ def main():
                     chain=chain,
                     logposts=logposts,
                     surrogate=surrogate,
-                    n_append=config.data.n_append,
+                    n_append=config.acquisition.n_append,
                     mcmc_temperature=config.sampling.temperature,
-                    pool_factor=config.data.pool_factor,
+                    pool_factor=config.acquisition.pool_factor,
                 ),
                 loglkl_fn,
                 description="augmentation candidates",

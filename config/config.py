@@ -15,9 +15,23 @@ class LikelihoodConfig:
         )
 
 @dataclass(frozen=True)
-class DataConfig:
-    n_initial: int
+class PriorConfig:
+    n_samples: int
+    sampling_strategy: str
     n_sigma: float | None
+
+    @classmethod
+    def from_dict(cls, d):
+        n_sigma = d.get('n_sigma')
+        return cls(
+            n_samples=int(d['n_samples']),
+            sampling_strategy=str(d['sampling_strategy']),
+            n_sigma=None if n_sigma is None else float(n_sigma),
+        )
+
+
+@dataclass(frozen=True)
+class AcquisitionConfig:
     n_append: int
     n_neighbors: int
     target_temperature: float
@@ -25,10 +39,7 @@ class DataConfig:
 
     @classmethod
     def from_dict(cls, d):
-        n_sigma = d.get('n_sigma')
         return cls(
-            n_initial=int(d['n_initial']),
-            n_sigma=None if n_sigma is None else float(n_sigma),
             n_append=int(d['n_append']),
             n_neighbors=int(d['n_neighbors']),
             target_temperature=float(d['target_temperature']),
@@ -108,7 +119,8 @@ class ConvergenceConfig:
 @dataclass(frozen=True)
 class Config:
     likelihood: LikelihoodConfig
-    data: DataConfig
+    prior: PriorConfig
+    acquisition: AcquisitionConfig
     model: ModelConfig
     training: TrainingConfig
     sampling: SamplingConfig
@@ -118,7 +130,8 @@ class Config:
     def from_dict(cls, d):
         return cls(
             likelihood=LikelihoodConfig.from_dict(d['likelihood']),
-            data=DataConfig.from_dict(d['data']),
+            prior=PriorConfig.from_dict(d['prior']),
+            acquisition=AcquisitionConfig.from_dict(d['acquisition']),
             model=ModelConfig.from_dict(d['model']),
             training=TrainingConfig.from_dict(d['training']),
             sampling=SamplingConfig.from_dict(d['sampling']),

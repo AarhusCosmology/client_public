@@ -23,7 +23,8 @@
     - [Temperature Scheme](#temperature-scheme)
 - [Configuration](#configuration)
   - [Likelihood Configuration](#likelihood-configuration)
-  - [Data Configuration](#data-configuration)
+  - [Prior Configuration](#prior-configuration)
+  - [Acquisition Configuration](#acquisition-configuration)
   - [Model Architecture](#model-architecture)
   - [Training Configuration](#training-configuration)
   - [Sampling Configuration](#sampling-configuration)
@@ -252,7 +253,7 @@ Additional benchmarking and analysis scripts are available in the `benchmarking/
 
 CLiENT implements a temperature-based iterative training scheme:
 
-1. **Initial Sampling**: Latin Hypercube sampling within restricted prior bounds (±n<sub>std</sub>σ around fiducial values)
+1. **Initial Sampling**: Configurable prior sampling (LHS, scrambled Sobol, or uniform) within restricted prior bounds (±n<sub>std</sub>σ around fiducial values)
 
 2. **Neural Network Training**:
    - Deep feedforward network with the Alsing activation function
@@ -319,12 +320,18 @@ likelihood:
   input: input/cobaya/example.yaml  # Cobaya .yaml file
 ```
 
-### Data Configuration
+### Prior Configuration
 ```yaml
-data:
+prior:
   n_samples: 5000          # Number of initial samples
+  sampling_strategy: lhs   # 'lhs', 'sobol', or 'uniform'
   n_sigma: 10.0            # Prior restriction (±10σ from fiducial)
-  batch_size: 1000         # Number of new points added per iteration (B_t)
+```
+
+### Acquisition Configuration
+```yaml
+acquisition:
+  n_append: 1000           # Number of new points added per iteration (B_t)
   pool_factor: 20          # Candidate pool size multiplier (pool = pool_factor * batch_size)
   n_neighbors: 20          # Neighbors for density estimation
   target_temperature: 7.0  # Training temperature T_T

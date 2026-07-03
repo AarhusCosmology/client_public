@@ -2,9 +2,12 @@ likelihood:
   wrapper: montepython
   input: input/montepython/sterileLCDM_TTTEEE_lensing_bao.param
 
-data:
-  n_initial: 5000
+prior:
+  n_samples: 5000
+  sampling_strategy: lhs
   n_sigma: 10.0
+
+acquisition:
   n_append: 1000
   pool_factor: 20
   n_neighbors: 20

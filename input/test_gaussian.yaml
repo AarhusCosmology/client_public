@@ -2,9 +2,12 @@ likelihood:
   wrapper: montepython
   input: input/montepython/test_gaussian.param
 
-data:
-  n_initial: 500
+prior:
+  n_samples: 500
+  sampling_strategy: lhs
   n_sigma: 10.0
+
+acquisition:
   n_append: 250
   pool_factor: 20
   n_neighbors: 20
