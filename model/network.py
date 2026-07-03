@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from .activations import build_activation, Alsing
+from .activations import build_activation
 
 @tf.keras.utils.register_keras_serializable(package="CLiENT")
 class TargetDenormalization(tf.keras.layers.Layer):
@@ -80,7 +80,6 @@ def build_model(x_train, y_train, n_layers, n_neurons, activation):
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
-
 
 def load_model(path):
     return tf.keras.models.load_model(path, compile=False)
