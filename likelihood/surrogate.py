@@ -86,7 +86,6 @@ class SurrogateMetadata:
 
         return cls(parameters=parameters)
 
-
 class SurrogateLikelihood:
     def __init__(self, model, metadata):
         self.model = model
@@ -119,19 +118,16 @@ class SurrogateLikelihood:
             for param in self._params
         }
 
-    def _in_bounds(self, positions):
-        return tf.reduce_all(
-            (positions >= self._lower) & (positions <= self._upper),
-            axis=1
-        )
-
     def loglkl(self, positions):
         # Evaluate the surrogate model at the input positions.
         return tf.squeeze(self.model(positions, training=False), axis=1)
 
     def logprior(self, positions):
         # Return zero inside the surrogate bounds and -inf outside them.
-        in_bounds = self._in_bounds(positions)
+        in_bounds = tf.reduce_all(
+            (positions >= self._lower) & (positions <= self._upper),
+            axis=1
+        )
         return tf.where(in_bounds, 0.0, -float('inf'))
 
     def logpost(self, positions):
