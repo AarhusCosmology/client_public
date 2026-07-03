@@ -279,7 +279,7 @@ def main():
                 )
             elif previous_chain_summary is not None:
                 save_chain_summary(run.convergence_stats, iteration, chain_summary)
-                metric_value = metric.compute_from_summary(chain, previous_chain_summary)
+                metric_value = metric.compute_from_summary(chain_summary, previous_chain_summary)
                 converged = metric_value < config.convergence.threshold
                 print_master(f"  {metric.name} = {metric_value:.6f}  (threshold: {config.convergence.threshold})")
                 metrics_tracker.add_convergence_metrics(iteration, metric_value, converged, metric_name=metric.name)

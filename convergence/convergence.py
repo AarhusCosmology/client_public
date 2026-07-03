@@ -10,8 +10,8 @@ class BaseConvergenceMetric(ABC):
         pass
 
     @abstractmethod
-    def compute_from_summary(self, chain, previous_chain_summary):
-        """chain: (n_samples, ndim) flat array. Returns scalar metric value."""
+    def compute_from_summary(self, current_chain_summary, previous_chain_summary):
+        """summary dicts -> scalar metric value."""
         pass
 
 class GaussianPosteriorDrift(BaseConvergenceMetric):
@@ -22,7 +22,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
         self.name = name
 
     def _validate_chain(self, chain):
-        chain = np.asarray(chain, dtype=np.float64)
+        chain = np.asarray(chain)
 
         if chain.ndim != 2:
             raise ValueError(
@@ -41,34 +41,41 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
         chain = self._validate_chain(chain)
 
         return {
-            "mean": chain.mean(axis=0),
-            "cov": np.atleast_2d(np.cov(chain, rowvar=False)),
+            "mean": np.mean(chain, axis=0, dtype=np.float64),
+            "cov": np.atleast_2d(np.cov(chain, rowvar=False, dtype=np.float64)),
         }
 
-    def compute_from_summary(self, chain, previous_chain_summary):
-        current = self.summarise(chain)
+    def compute_from_summary(self, current_chain_summary, previous_chain_summary):
+        current_mean = np.asarray(current_chain_summary["mean"], dtype=np.float64)
+        current_cov = np.atleast_2d(
+            np.asarray(current_chain_summary["cov"], dtype=np.float64)
+        )
 
         prev_mean = np.asarray(previous_chain_summary["mean"], dtype=np.float64)
         prev_cov = np.atleast_2d(
             np.asarray(previous_chain_summary["cov"], dtype=np.float64)
         )
 
-        if prev_mean.shape != current["mean"].shape:
+        if prev_mean.shape != current_mean.shape:
             raise ValueError(
                 "Current and previous means have incompatible shapes"
             )
-        if prev_cov.shape != current["cov"].shape:
+        if prev_cov.shape != current_cov.shape:
             raise ValueError(
                 "Current and previous covariances have incompatible shapes"
             )
+        if not np.all(np.isfinite(current_mean)):
+            raise ValueError("Current mean contains NaN or infinite values")
+        if not np.all(np.isfinite(current_cov)):
+            raise ValueError("Current covariance contains NaN or infinite values")
         if not np.all(np.isfinite(prev_mean)):
             raise ValueError("Previous mean contains NaN or infinite values")
         if not np.all(np.isfinite(prev_cov)):
             raise ValueError("Previous covariance contains NaN or infinite values")
 
         return self._metric(
-            current["mean"],
-            current["cov"],
+            current_mean,
+            current_cov,
             prev_mean,
             prev_cov,
         )
