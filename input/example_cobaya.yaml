@@ -1,17 +1,17 @@
 likelihood:
   wrapper: cobaya # 'montepython' or 'cobaya'
-  input: input/cobaya/example.yaml # path to the Cobaya input (.yaml) or MontePython parameter (.param) file
+  input: input/cobaya/example.yaml # path to the MontePython parameter (.param) or Cobaya input (.yaml) file
 
 prior:
   n_samples: 100 # number of initial samples drawn from the prior
   sampling_strategy: lhs # one of: lhs, sobol, uniform
-  n_sigma: 100.0 # prior box half-width in units of parameter std
+  n_sigma: null # prior box half-width in units of parameter std
 
 acquisition:
-  n_append: 50 # number of new training points added per iteration (B_t)
+  n_append: 50 # number of new training points added per iteration
   pool_factor: 20 # candidate pool size is pool_factor * n_append
   n_neighbors: 20 # k for the k-NN density estimator
-  target_temperature: 7.0 # temperature T defining the target density L^{1/T} * pi
+  target_temperature: 7.0 # temperature T defining the target density L^{1/T}
 
 model:
   n_layers: 5 # number of hidden layers
@@ -20,21 +20,21 @@ model:
 
 training:
   n_epochs: 500 # maximum training epochs
-  batch_size: 128
+  batch_size: 128 # batch size for training
   loss: msre # 'msre' or standard Keras loss name
-  kappa_sigma: 3 # MSRE transition width in sigma
-  learning_rate: 0.001
-  validation_split: 0.1
+  sigma_level: 3 # MSRE transition width in sigma
+  learning_rate: 0.001 # learning rate for the Adam optimizer
+  validation_split: 0.1 # fraction of training data used for validation
   patience: 250 # early-stopping patience
 
 sampling:
-  sampler: aies
+  sampler: aies # Affine Invariant Ensemble Sampler
   temperature: 7.0 # MCMC sampling temperature
-  n_walkers: 16
-  n_steps: 10000
-  burn_in: 500
+  n_walkers: 16 # number of walkers in the ensemble
+  n_steps: 10000 # number of MCMC steps
+  burn_in: 500 # number of burn-in steps
 
 convergence:
-  metric: gaussian_posterior_drift
+  metric: gaussian_posterior_drift # convergence metric
   threshold: 0.01 # threshold
-  max_iterations: 20
+  max_iterations: 20 # maximum number of iterations

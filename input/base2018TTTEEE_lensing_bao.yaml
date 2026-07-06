@@ -22,7 +22,7 @@ training:
   n_epochs: 5000
   batch_size: 128
   loss: msre
-  kappa_sigma: 3
+  sigma_level: 3
   learning_rate: 0.0001
   validation_split: 0.1
   patience: 250
