@@ -64,7 +64,7 @@ class ModelConfig:
 class TrainingConfig:
     learning_rate: float
     loss: str
-    kappa_sigma: float
+    sigma_level: float
     n_epochs: int
     batch_size: int
     validation_split: float
@@ -75,7 +75,7 @@ class TrainingConfig:
         return cls(
             learning_rate=float(d['learning_rate']),
             loss=str(d['loss']),
-            kappa_sigma=float(d['kappa_sigma']),
+            sigma_level=float(d['sigma_level']),
             n_epochs=int(d['n_epochs']),
             batch_size=int(d['batch_size']),
             validation_split=float(d['validation_split']),

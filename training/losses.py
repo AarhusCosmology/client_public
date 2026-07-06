@@ -1,19 +1,24 @@
 import tensorflow as tf
 
-def _wilson_hilferty(kappa, n):
-    # Chi-squared quantile approximation via Wilson-Hilferty transform
-    mu = 1.0 - 2.0 / (9.0 * n)
-    sigma = tf.sqrt(2.0 / (9.0 * n))
-    return n * tf.pow(mu + kappa * sigma, 3.0)
+def _chi2_quantile_wilson_hilferty(sigma_level, chi2_dof):
+    # Approximate a chi-squared quantile using the Wilson-Hilferty transform.
+    # sigma_level is the equivalent standard-normal sigma level.
+    center = 1.0 - 2.0 / (9.0 * chi2_dof)
+    width = tf.sqrt(2.0 / (9.0 * chi2_dof))
+    return chi2_dof * tf.pow(center + sigma_level * width, 3.0)
 
-def _create_msre(kappa, n, y_global_max):
-    def msre(y_true, y_pred):
-        denominator = y_true - y_global_max - 0.5 * _wilson_hilferty(kappa, n)
-        relative_error = (y_pred - y_true) / denominator
-        return tf.reduce_mean(tf.square(relative_error))
+def _build_msre(sigma_level, chi2_dof, max_loglkl):
+    chi2_quantile = _chi2_quantile_wilson_hilferty(sigma_level, chi2_dof)
+    half_chi2_quantile = 0.5 * chi2_quantile
+
+    def msre(true_loglkl, pred_loglkl):
+        loglkl_scale = true_loglkl - max_loglkl - half_chi2_quantile
+        relative_loglkl_error = (pred_loglkl - true_loglkl) / loglkl_scale
+        return tf.reduce_mean(tf.square(relative_loglkl_error))
+        
     return msre
 
-def build_loss(name, kappa=None, n=None, y_global_max=None):
+def build_loss(name, sigma_level=None, chi2_dof=None, max_loglkl=None):
     if name == 'msre':
-        return _create_msre(kappa, n, y_global_max)
+        return _build_msre(sigma_level, chi2_dof, max_loglkl)
     return name
