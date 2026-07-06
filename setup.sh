@@ -185,13 +185,6 @@ if prompt_yes_no "Add 'conda activate ${ENV_NAME}' to your .bashrc?" "n"; then
     add_to_bashrc "conda activate ${ENV_NAME}" "Auto-activate CLiENT conda environment"
 fi
 
-# Install best-inference (local editable install until upstream merge)
-BEST_INFERENCE_PATH="${RESOURCES_DIR}/best_inference"
-if [ ! -d "$BEST_INFERENCE_PATH" ]; then
-    git clone https://github.com/LucaJanken/best-inference.git "$BEST_INFERENCE_PATH"
-fi
-pip install -q -e "$BEST_INFERENCE_PATH"
-
 # ========================================
 # 2. CLASS Setup
 # ========================================

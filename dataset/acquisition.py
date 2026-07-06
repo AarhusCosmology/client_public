@@ -3,12 +3,33 @@ import tensorflow as tf
 
 from scipy.special import gammaln, logsumexp
 
-def _log_unit_ball_volume(n_dims):
-    return (n_dims / 2.0) * np.log(np.pi) - gammaln(n_dims / 2.0 + 1.0)
+def _log_unit_ball_volume(ndim):
+    return (ndim / 2.0) * np.log(np.pi) - gammaln(ndim / 2.0 + 1.0)
+
+def _deduplicate(chain, logposts):
+    chain = np.asarray(chain)
+    logposts = np.asarray(logposts)
+    points = []
+    point_logposts = []
+    counts = []
+    for walker in range(chain.shape[1]):
+        x = chain[:, walker, :]
+        y = logposts[:, walker]
+        starts = np.r_[True, np.any(x[1:] != x[:-1], axis=1)]
+        start_indices = np.flatnonzero(starts)
+        points.append(x[start_indices])
+        point_logposts.append(y[start_indices])
+        counts.append(np.diff(np.r_[start_indices, len(x)]))
+
+    return (
+        np.concatenate(points, axis=0),
+        np.concatenate(point_logposts, axis=0),
+        np.concatenate(counts, axis=0)
+    )
 
 def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperature, pool_factor):
     knn_index = dataset.knn_index
-    n_dims = knn_index.n_dims
+    ndim = knn_index.ndim
     n_neighbors = dataset.n_neighbors
     target_temperature = dataset.target_temperature
     n_current = len(dataset.inputs)
@@ -19,22 +40,17 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
     log_weight_coeff = mcmc_temperature / target_temperature - 1.0
 
     # Collapse exact duplicate MCMC states, but preserve their total probability mass
-    chain_unique, first_idx, counts = np.unique(
-        chain,
-        axis=0,
-        return_index=True,
-        return_counts=True,
-    )
-    logposts_unique = logposts[first_idx]
+    chain_unique, logposts_unique, counts = _deduplicate(chain, logposts)
     log_weights_unique = log_weight_coeff * logposts_unique + np.log(counts)
 
     # Calculate and print the deduplication statistics
-    n_duplicates = len(chain) - len(chain_unique)
-    unique_fraction = len(chain_unique) / len(chain)
+    n_samples = int(np.prod(chain.shape[:-1]))
+    n_duplicates = n_samples - len(chain_unique)
+    unique_fraction = len(chain_unique) / n_samples
     max_multiplicity = np.max(counts)
     print(
         f"Surrogate chain deduplication: "
-        f"{len(chain)} samples -> {len(chain_unique)} unique "
+        f"{n_samples} samples -> {len(chain_unique)} unique "
         f"({n_duplicates} duplicates, unique_fraction={unique_fraction:.3f}, "
         f"max_multiplicity={max_multiplicity})"
     )
@@ -61,8 +77,8 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
     # distance from the i-th training point to its k-th nearest other training point
     training_data_distances, _ = knn_index.query(dataset.inputs, n_neighbors + 1)
     r_k_train = training_data_distances[:, n_neighbors]
-    log_ball_vol = _log_unit_ball_volume(n_dims)
-    log_rho_train = np.log(n_neighbors - 1) - log_ball_vol - n_dims * np.log(r_k_train)
+    log_ball_vol = _log_unit_ball_volume(ndim)
+    log_rho_train = np.log(n_neighbors - 1) - log_ball_vol - ndim * np.log(r_k_train)
     loglkl_surr_train = surrogate.loglkl(tf.constant(dataset.inputs)).numpy()
     log_Z_surr = logsumexp(loglkl_surr_train / target_temperature - log_rho_train)
 
@@ -81,7 +97,7 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
         # Compute the k-th nearest neighbor distances for the merged set of points (current training data + selected points)
         merged_distances = np.concatenate([pool_distances, selected_distances], axis=1)
         r_k_merged = np.partition(merged_distances, n_neighbors - 1, axis=1)[:, n_neighbors - 1]
-        log_rho_merged = np.log(n_neighbors) - log_ball_vol - n_dims * np.log(r_k_merged)
+        log_rho_merged = np.log(n_neighbors) - log_ball_vol - ndim * np.log(r_k_merged)
 
         # Compute the next-point target number density
         # log ρ_target = log[ (n_current + 1) * q_surr ]

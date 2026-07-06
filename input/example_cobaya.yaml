@@ -16,7 +16,7 @@ acquisition:
 model:
   n_layers: 5 # number of hidden layers
   n_neurons: 512 # neurons per hidden layer
-  activation: alsing # 'alsing', 'custom_tanh', or standard Keras name
+  activation: alsing # 'alsing' or standard Keras name
 
 training:
   n_epochs: 500 # maximum training epochs
@@ -31,12 +31,10 @@ sampling:
   sampler: aies
   temperature: 7.0 # MCMC sampling temperature
   n_walkers: 16
-  n_chains: 2
-  max_steps: 10000
+  n_steps: 10000
   burn_in: 500
 
 convergence:
   metric: gaussian_posterior_drift
-  threshold: 0.01 # R-1 threshold
+  threshold: 0.01 # threshold
   max_iterations: 20
-

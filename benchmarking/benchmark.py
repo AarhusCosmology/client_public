@@ -24,7 +24,7 @@ def parse_args():
         "--n-steps",
         type=int,
         default=None,
-        help="Number of MCMC steps (defaults to max_steps from config)",
+        help="Number of MCMC steps (defaults to n_steps from config)",
     )
     parser.add_argument("-t", "--thin", type=int, default=1, help="Thinning factor for chains")
     parser.add_argument("-p", "--params", nargs="+", default=None, help="Parameter indices to include in analysis")
@@ -123,30 +123,33 @@ def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_
         return chain_path, chain, log_prob
 
     n_walkers = sampling_config["n_walkers"]
-    n_chains = sampling_config["n_chains"]
     burn_in = sampling_config["burn_in"]
     print(f"Running {sampler_name} sampler: {n_walkers} walkers, {burn_in} burn-in, {n_steps} steps")
 
-    lower = [bounds[0] for bounds in prior_bounds.values()]
-    upper = [bounds[1] for bounds in prior_bounds.values()]
+    lower = np.asarray([bounds[0] for bounds in prior_bounds.values()], dtype=np.float32)
+    upper = np.asarray([bounds[1] for bounds in prior_bounds.values()], dtype=np.float32)
+    if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)):
+        raise ValueError("Benchmark sampling requires finite prior bounds for all parameters")
+
     sampler = build_sampler(
         name=sampler_name,
         n_walkers=n_walkers,
-        n_chains=n_chains,
         ndim=len(param_names),
-        logpost_fn=surrogate.logpost,
-        bounds=(lower, upper),
+        log_prob_fn=surrogate.logpost,
     )
-    initial_pos = np.random.uniform(
+    initial_positions = np.random.uniform(
         low=lower,
         high=upper,
-        size=(n_chains, n_walkers, len(param_names)),
+        size=(n_walkers, len(param_names)),
     )
-    sampler.run(initial_pos=initial_pos, max_steps=n_steps)
-    chain = sampler.get_chain(discard=burn_in, thin=thin)
-    log_prob = sampler.get_logpost(discard=burn_in, thin=thin)
-    np.savez(chain_path, chain=chain, log_prob=log_prob)
+    sampler.run(initial_positions=initial_positions, n_steps=n_steps)
+    chain = sampler.chain(discard=burn_in, thin=thin).numpy()
+    log_prob = sampler.log_prob(discard=burn_in, thin=thin).numpy()
+    acceptance = sampler.acceptance_fraction().numpy()
+    sampler.reset()
+    np.savez(chain_path, chain=chain, log_prob=log_prob, acceptance_fraction=acceptance)
     print(f"Chain shape: {chain.shape}")
+    print(f"Mean acceptance fraction: {np.mean(acceptance):.3f}")
     return chain_path, chain, log_prob
 
 
@@ -219,7 +222,7 @@ def main():
     run_dir = Path(args.run_dir)
 
     config_yaml, config = load_run_config(run_dir)
-    n_steps = config["sampling"]["max_steps"] if args.n_steps is None else args.n_steps
+    n_steps = config["sampling"]["n_steps"] if args.n_steps is None else args.n_steps
     iteration = resolve_iteration(run_dir, args.iteration)
     surrogate, metadata = load_surrogate(run_dir, iteration)
 

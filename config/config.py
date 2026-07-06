@@ -87,9 +87,8 @@ class SamplingConfig:
     sampler: str
     temperature: float
     n_walkers: int
-    n_chains: int
     burn_in: int
-    max_steps: int
+    n_steps: int
 
     @classmethod
     def from_dict(cls, d):
@@ -97,9 +96,8 @@ class SamplingConfig:
             sampler=str(d['sampler']),
             temperature=float(d['temperature']),
             n_walkers=int(d['n_walkers']),
-            n_chains=int(d['n_chains']),
             burn_in=int(d['burn_in']),
-            max_steps=int(d['max_steps']),
+            n_steps=int(d['n_steps']),
         )
 
 @dataclass(frozen=True)

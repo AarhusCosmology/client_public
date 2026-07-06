@@ -19,7 +19,7 @@ model:
   activation: alsing
 
 training:
-  n_epochs: 5000
+  n_epochs: 50
   batch_size: 128
   loss: msre
   kappa_sigma: 3
@@ -30,9 +30,8 @@ training:
 sampling:
   sampler: aies
   temperature: 7.0
-  n_walkers: 58
-  n_chains: 1
-  max_steps: 100000
+  n_walkers: 232
+  n_steps: 100000
   burn_in: 5000
 
 convergence:

@@ -237,47 +237,42 @@ def main():
             sampler = build_sampler(
                 name=config.sampling.sampler,
                 n_walkers=config.sampling.n_walkers,
-                n_chains=config.sampling.n_chains,
                 ndim=ndim,
-                logpost_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
-                bounds=(prior_lower, prior_upper),
+                log_prob_fn=lambda positions: surrogate.logpost(positions) / config.sampling.temperature,
             )
 
-            print_master(f"Sampling (method={config.sampling.sampler}, {config.sampling.n_chains} chains × {config.sampling.n_walkers} walkers, T={config.sampling.temperature})...")
+            print_master(f"Sampling (method={config.sampling.sampler}, {config.sampling.n_walkers} walkers, T={config.sampling.temperature})...")
             t_sample = time.time()
 
-            initial_pos = np.random.uniform(
+            initial_positions = np.random.uniform(
                 low =prior_lower,
                 high=prior_upper,
-                size=(config.sampling.n_chains, config.sampling.n_walkers, ndim),
+                size=(config.sampling.n_walkers, ndim),
             )
             sampler.run(
-                initial_pos=initial_pos,
-                max_steps=config.sampling.max_steps,
+                n_steps=config.sampling.n_steps,
+                initial_positions=initial_positions,
             )
 
-            chain      = sampler.get_chain(discard=config.sampling.burn_in, flat=True)
-            logposts   = sampler.get_logpost(discard=config.sampling.burn_in, flat=True)
-            acceptance = sampler.get_acceptance_fraction()
-            # Drop sampler references; chain/logposts keep the backing arrays alive
-            # as views without forcing another full-chain copy.
-            sampler.free_memory()
+            chain      = sampler.chain(discard=config.sampling.burn_in).numpy()
+            logposts   = sampler.log_prob(discard=config.sampling.burn_in).numpy()
+            acceptance = sampler.acceptance_fraction().numpy()
+            sampler.reset()
 
             sampling_time = time.time() - t_sample
-            steps_done    = sampler.get_n_steps()
 
-            print_master(f"  {len(chain)} samples in {sampling_time:.1f}s ({steps_done} steps/walker)")
+            print_master(f"  {len(chain.reshape(-1, ndim))} samples in {sampling_time:.1f}s ({config.sampling.n_steps} steps/walker)")
             metrics_tracker.add_sampling_metrics(
                 iteration=iteration,
-                steps_per_walker=int(steps_done),
-                acceptance_rate=acceptance,
+                steps_per_walker=config.sampling.n_steps,
+                acceptance_rate=float(np.mean(acceptance)),
                 sampling_time=sampling_time,
             )
 
         # -- Convergence check --
         converged = False
         if is_master():
-            chain_summary = metric.summarise(chain)
+            chain_summary = metric.summarise(chain.reshape(-1, ndim))
             skip_reused_start_convergence = (
                 reuse_start_chain_summary
                 and run.reuse_start_model
@@ -299,7 +294,7 @@ def main():
                     print_master(f"\nConverged at iteration {iteration}!\n")
             else:
                 save_chain_summary(run.convergence_stats, iteration, chain_summary)
-                print_master("  R-1 not yet calculable (need >= 2 iterations)")
+                print_master(f"{metric.name} not yet calculable (need >= 2 iterations)")
             if not skip_reused_start_convergence:
                 previous_chain_summary = chain_summary
 
@@ -322,13 +317,13 @@ def main():
             candidate_points, candidate_loglkls = broadcast_and_evaluate(
                 lambda: select_points(
                     dataset=dataset,
-                    chain=chain,
-                    logposts=logposts,
+                    chain=chain, #now not flattened
+                    logposts=logposts, #now not flattened
                     surrogate=surrogate,
                     n_append=config.acquisition.n_append,
                     mcmc_temperature=config.sampling.temperature,
                     pool_factor=config.acquisition.pool_factor,
-                ),
+                ), #should we also pass some sort of acceptance array(s)? perhaps that could be useful for a potential replacement for np.unique inside select_points but im not sure
                 loglkl_fn,
                 description="augmentation candidates",
             )
@@ -339,7 +334,7 @@ def main():
                 if (~valid).any():
                     print_master(
                         f"  Warning: filtered {(~valid).sum()}/{n_evaluated} "
-                        "augmentation candidates with non-finite log-lkl"
+                        f"augmentation candidates with non-finite log-lkl"
                     )
                 accepted_points = candidate_points[valid]
                 accepted_loglkls = candidate_loglkls[valid]

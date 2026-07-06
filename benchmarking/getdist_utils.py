@@ -15,12 +15,12 @@ def getdist_sample_inputs(chain, log_prob, sampler_name):
     if chain.ndim == 3:
         _validate_log_prob_shape(chain, log_prob)
         if sampler_name == "aies":
-            # Legacy AIES cache shape: (n_steps, n_walkers, ndim).
+            # Current AIES cache shape: (n_steps, n_walkers, ndim).
             samples = [chain[:, walker_idx, :] for walker_idx in range(chain.shape[1])]
             loglikes = [-log_prob[:, walker_idx] for walker_idx in range(log_prob.shape[1])]
             return samples, loglikes, len(samples) > 1
 
-        # Non-ensemble samplers: (n_steps, n_chains, ndim).
+        # Legacy non-ensemble sampler cache shape: (n_steps, independent chains, ndim).
         samples = [chain[:, chain_idx, :] for chain_idx in range(chain.shape[1])]
         loglikes = [-log_prob[:, chain_idx] for chain_idx in range(chain.shape[1])]
         return samples, loglikes, len(samples) > 1
@@ -57,7 +57,7 @@ def select_plot_params(requested_params, param_names, getdist_names):
 
 
 def _ensemble_chain_inputs(chain, log_prob):
-    # AIES: (n_steps, n_chains, n_walkers, ndim).
+    # Legacy multi-ensemble AIES cache shape: (n_steps, independent ensembles, n_walkers, ndim).
     _validate_log_prob_shape(chain, log_prob)
     samples = [
         chain[:, chain_idx, walker_idx, :]

@@ -31,8 +31,7 @@ sampling:
   sampler: aies
   temperature: 7.0
   n_walkers: 232
-  n_chains: 1
-  max_steps: 100000
+  n_steps: 100000
   burn_in: 5000
 
 convergence:

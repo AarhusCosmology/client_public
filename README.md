@@ -89,7 +89,7 @@ Install the Python wrapper from the `class_public/python` directory:
 
 ```bash
 python setup.py build
-python setup.py install --user  # Use --user unless in a virtual/conda environment
+python setup.py install
 ```
 
 #### Planck Likelihood Setup (for MontePython)
@@ -185,7 +185,7 @@ or with MontePython:
 python client.py input/example_montepython.yaml -n my_run
 ```
 
-Continue from an existing run (skips retraining by default):
+Continue from an existing run:
 
 ```bash
 python client.py results/my_run_directory
@@ -233,8 +233,8 @@ python benchmarking/benchmark.py results/my_run_directory
 ```
 
 Benchmark options:
-- `-it`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
-- `-n`, `--n-steps N`: Number of MCMC steps (defaults to `max_steps` from config)
+- `-i`, `--iteration N`: Iteration to benchmark (auto-detects latest if not specified)
+- `-n`, `--n-steps N`: Number of MCMC steps (defaults to `n_steps` from config)
 - `-t`, `--thin N`: Thinning factor for chains (default: 1)
 - `-p`, `--params`: Parameter names, or comma-separated 1-based parameter indices, to include in analysis
 - `-c`, `--chains DIR`: Path to MontePython or Cobaya chains directory for comparison
@@ -261,7 +261,7 @@ CLiENT implements a temperature-based iterative training scheme:
    - Early stopping with validation monitoring
 
 3. **Tempered MCMC Sampling**:
-   - Surrogate sampling with methods provided by best-inference (e.g. AIES, MH, HMC, NUTS, MALA)
+   - Surrogate sampling with the built-in affine-invariant ensemble sampler (AIES)
    - Temperature T<sub>MCMC</sub> controls exploration
 
 4. **Adaptive Resampling**:
@@ -342,7 +342,7 @@ acquisition:
 model:
   n_layers: 5               # Number of hidden layers
   n_neurons: 512            # Neurons per hidden layer
-  activation: alsing        # 'alsing', 'custom_tanh', or TensorFlow activations
+  activation: alsing        # 'alsing' or TensorFlow activations
 ```
 
 ### Training Configuration
@@ -360,11 +360,10 @@ training:
 ### Sampling Configuration
 ```yaml
 sampling:
-  sampler: aies             # 'aies', 'mh', 'hmc', 'nuts', or 'mala'
+  sampler: aies             # Built-in affine-invariant ensemble sampler
   temperature: 7.0          # MCMC temperature T_MCMC
-  n_walkers: 216            # Walkers per chain (used by AIES)
-  n_chains: 2               # Number of independent chains
-  max_steps: 100000         # Maximum MCMC steps
+  n_walkers: 216            # Walkers in the ensemble
+  n_steps: 100000           # MCMC steps
   burn_in: 5000             # Burn-in steps to discard
 ```
 
