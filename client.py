@@ -261,7 +261,8 @@ def main():
 
             sampling_time = time.time() - t_sample
 
-            print_master(f"  {len(chain.reshape(-1, ndim))} samples in {sampling_time:.1f}s ({config.sampling.n_steps} steps/walker)")
+            n_samples = int(np.prod(chain.shape[:-1]))
+            print_master(f"  {n_samples} samples in {sampling_time:.1f}s ({config.sampling.n_steps} steps/walker)")
             metrics_tracker.add_sampling_metrics(
                 iteration=iteration,
                 steps_per_walker=config.sampling.n_steps,
@@ -272,7 +273,7 @@ def main():
         # -- Convergence check --
         converged = False
         if is_master():
-            chain_summary = metric.summarise(chain.reshape(-1, ndim))
+            chain_summary = metric.summarise(chain)
             skip_reused_start_convergence = (
                 reuse_start_chain_summary
                 and run.reuse_start_model

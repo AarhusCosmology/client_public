@@ -6,7 +6,7 @@ from pathlib import Path
 class BaseConvergenceMetric(ABC):
     @abstractmethod
     def summarise(self, chain):
-        """chain: (n_samples, ndim) flat array. Returns a chain summary dict."""
+        """chain: (n_steps, n_walkers, ndim) ensemble array. Returns a chain summary dict."""
         pass
 
     @abstractmethod
@@ -24,25 +24,45 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
     def _validate_chain(self, chain):
         chain = np.asarray(chain)
 
-        if chain.ndim != 2:
+        if chain.ndim != 3:
             raise ValueError(
-                f"chain must have shape (n_samples, ndim), got {chain.shape}"
+                f"chain must have shape (n_steps, n_walkers, ndim), got {chain.shape}"
             )
-        if chain.shape[0] < 2:
+        n_steps, n_walkers, ndim = chain.shape
+        if n_steps < 1:
+            raise ValueError("chain must contain at least one step")
+        if n_walkers < 1:
+            raise ValueError("chain must contain at least one walker")
+        if n_steps * n_walkers < 2:
             raise ValueError("At least two samples are needed")
-        if chain.shape[1] < 1:
+        if ndim < 1:
             raise ValueError("chain must contain at least one parameter")
-        if not np.all(np.isfinite(chain)):
-            raise ValueError("chain contains NaN or infinite values")
 
         return chain
 
     def summarise(self, chain):
         chain = self._validate_chain(chain)
+        n_steps, n_walkers, ndim = chain.shape
+        n_samples = n_steps * n_walkers
 
+        sum_x = np.zeros(ndim, dtype=np.float64)
+        for walker in range(n_walkers):
+            walker_chain = chain[:, walker, :]
+            if not np.all(np.isfinite(walker_chain)):
+                raise ValueError("chain contains NaN or infinite values")
+            sum_x += np.sum(walker_chain, axis=0, dtype=np.float64)
+
+        mean = sum_x / n_samples
+        scatter = np.zeros((ndim, ndim), dtype=np.float64)
+        for walker in range(n_walkers):
+            centered = np.array(chain[:, walker, :], dtype=np.float64, copy=True)
+            centered -= mean
+            scatter += centered.T @ centered
+
+        cov = scatter / (n_samples - 1)
         return {
-            "mean": np.mean(chain, axis=0, dtype=np.float64),
-            "cov": np.atleast_2d(np.cov(chain, rowvar=False, dtype=np.float64)),
+            "mean": mean,
+            "cov": cov,
         }
 
     def compute_from_summary(self, current_chain_summary, previous_chain_summary):
