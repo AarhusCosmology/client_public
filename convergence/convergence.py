@@ -10,9 +10,25 @@ class BaseConvergenceMetric(ABC):
         pass
 
     @abstractmethod
-    def compute_from_summary(self, current_chain_summary, previous_chain_summary):
+    def compute_from_summaries(self, current_chain_summary, previous_chain_summary):
         """summary dicts -> scalar metric value."""
         pass
+
+    @staticmethod
+    def save_chain_summary(convergence_stats_dir, iteration, chain_summary):
+        path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(path, **{k: np.asarray(v) for k, v in chain_summary.items()})
+        return path
+
+    @staticmethod
+    def load_chain_summary(convergence_stats_dir, iteration):
+        path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
+        if not path.exists():
+            return None
+        with np.load(path) as data:
+            chain_summary = {k: data[k] for k in data.files}
+        return chain_summary
 
 class GaussianPosteriorDrift(BaseConvergenceMetric):
     def __init__(self, relative_floor=1e-12, name="gaussian_posterior_drift"):
@@ -65,7 +81,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
             "cov": cov,
         }
 
-    def compute_from_summary(self, current_chain_summary, previous_chain_summary):
+    def compute_from_summaries(self, current_chain_summary, previous_chain_summary):
         current_mean = np.asarray(current_chain_summary["mean"], dtype=np.float64)
         current_cov = np.atleast_2d(
             np.asarray(current_chain_summary["cov"], dtype=np.float64)
@@ -168,19 +184,3 @@ def build_convergence_metric(name):
     if name not in registry:
         raise ValueError(f"Unknown convergence metric: '{name}'. Available: {list(registry)}")
     return registry[name](name=name)
-
-
-def save_chain_summary(convergence_stats_dir, iteration, chain_summary):
-    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
-    path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, **{k: np.asarray(v) for k, v in chain_summary.items()})
-    return path
-
-
-def load_chain_summary(convergence_stats_dir, iteration):
-    path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
-    if not path.exists():
-        return None
-    with np.load(path) as data:
-        chain_summary = {k: data[k] for k in data.files}
-    return chain_summary, path
