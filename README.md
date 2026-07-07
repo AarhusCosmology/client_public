@@ -387,7 +387,7 @@ results/YYYYMMDD_HHMMSS_run_name/
 ├── benchmark_chains/         # Benchmark MCMC chains (from benchmark.py)
 ├── benchmark_figures/        # Triangle plots and visualizations (from benchmark.py)
 ├── benchmark_results/        # Diagnostics logs (from benchmark.py)
-├── metrics.log               # Human-readable metrics report
+├── metrics.md                # Human-readable metrics report
 ├── metrics.json              # Structured metrics (used for continuation)
 ├── metadata.json             # Surrogate metadata (names, labels, scales, bounds)
 └── example.yaml              # Copy of the input configuration file
