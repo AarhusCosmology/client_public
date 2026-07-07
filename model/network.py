@@ -10,9 +10,18 @@ class TargetDenormalization(tf.keras.layers.Layer):
     Fixed affine layer: y_raw = target_mean + target_std * z.
 
     The mean and standard deviation are stored as non-trainable weights so
-    that they are included in ``model.get_weights()`` / ``set_weights()``
-    and are therefore updated correctly when the surrogate is refreshed
-    in-place between iterations.
+    that ``model.get_weights()`` / ``set_weights()`` includes and correctly
+    updates them.
+
+    This is NOT sufficient on its own to refresh a model in place between
+    iterations, though: the model's input ``Normalization`` layer caches its
+    ``mean``/``variance`` as plain tensors derived from its underlying
+    ``adapt_mean``/``adapt_variance`` weights, and only recomputes that cache
+    inside ``finalize_state()``. ``set_weights()`` updates the underlying
+    weights but does not call ``finalize_state()``, so the ``Normalization``
+    layer silently keeps normalizing with the OLD statistics until
+    ``finalize_state()`` is called explicitly on it afterward. Any in-place
+    refresh of a full surrogate model must account for this separately.
     """
 
     def __init__(self, mean, std, **kwargs):
