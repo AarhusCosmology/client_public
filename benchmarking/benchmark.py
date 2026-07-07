@@ -42,7 +42,7 @@ def parse_args():
 def load_run_config(run_dir):
     import yaml
 
-    yaml_files = list(run_dir.glob("*.yaml"))
+    yaml_files = sorted(run_dir.glob("*.yaml"))
     if not yaml_files:
         raise FileNotFoundError(f"No .yaml file found in {run_dir}")
     if len(yaml_files) > 1:
@@ -61,9 +61,9 @@ def resolve_iteration(run_dir, requested_iteration):
     if not trained_models_dir.exists():
         raise FileNotFoundError(f"trained_models directory not found in {run_dir}")
 
-    model_files = list(trained_models_dir.glob("trained_model_it_*.keras"))
+    model_files = list(trained_models_dir.glob("model_it_*.keras"))
     if not model_files:
-        raise FileNotFoundError(f"No trained models found in {trained_models_dir}")
+        raise FileNotFoundError(f"No trained models matching model_it_*.keras found in {trained_models_dir}")
 
     iterations = []
     for model_file in model_files:
@@ -85,7 +85,7 @@ def load_surrogate(run_dir, iteration):
     from model.network import load_model
 
     metadata = SurrogateMetadata.load(run_dir / "metadata.json")
-    model = load_model(run_dir / f"trained_models/trained_model_it_{iteration}.keras")
+    model = load_model(run_dir / f"trained_models/model_it_{iteration}.keras")
     return SurrogateLikelihood(model, metadata), metadata
 
 
@@ -95,7 +95,7 @@ def load_training_samples(run_dir, iteration, param_names, skip_training_data):
     if skip_training_data:
         return None
 
-    data_path = run_dir / "training_data" / f"training_data_it_{iteration}.csv"
+    data_path = run_dir / "training_data" / f"data_it_{iteration}.csv"
     if not data_path.exists():
         return None
 
@@ -226,9 +226,9 @@ def main():
     iteration = resolve_iteration(run_dir, args.iteration)
     surrogate, metadata = load_surrogate(run_dir, iteration)
 
-    param_names = surrogate.get_param_names()
-    prior_bounds = surrogate.get_prior_bounds()
-    param_labels = surrogate.get_param_labels()
+    param_names = metadata.param_names
+    prior_bounds = metadata.bounds
+    param_labels = metadata.param_labels
     getdist_names = getdist_names_for_params(param_names)
     getdist_ranges = getdist_ranges_for_params(param_names, getdist_names, prior_bounds)
 
