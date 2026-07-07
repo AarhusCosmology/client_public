@@ -1,7 +1,8 @@
-import numpy as np
-
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+import numpy as np
+
 
 class BaseConvergenceMetric(ABC):
     @abstractmethod
@@ -16,19 +17,20 @@ class BaseConvergenceMetric(ABC):
 
     @staticmethod
     def save_chain_summary(convergence_stats_dir, iteration, chain_summary):
-        path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
+        path = Path(convergence_stats_dir) / f"chain_summary_it_{iteration}.npz"
         path.parent.mkdir(parents=True, exist_ok=True)
         np.savez(path, **{k: np.asarray(v) for k, v in chain_summary.items()})
         return path
 
     @staticmethod
     def load_chain_summary(convergence_stats_dir, iteration):
-        path = Path(convergence_stats_dir) / f'chain_summary_it_{iteration}.npz'
+        path = Path(convergence_stats_dir) / f"chain_summary_it_{iteration}.npz"
         if not path.exists():
             return None
         with np.load(path) as data:
             chain_summary = {k: data[k] for k in data.files}
         return chain_summary
+
 
 class GaussianPosteriorDrift(BaseConvergenceMetric):
     def __init__(self, relative_floor=1e-12, name="gaussian_posterior_drift"):
@@ -93,9 +95,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
         )
 
         if prev_mean.shape != current_mean.shape:
-            raise ValueError(
-                "Current and previous means have incompatible shapes"
-            )
+            raise ValueError("Current and previous means have incompatible shapes")
         if prev_cov.shape != current_cov.shape:
             raise ValueError(
                 "Current and previous covariances have incompatible shapes"
@@ -137,7 +137,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
         eigenvalues = np.maximum(eigenvalues, floor)
 
         return eigenvalues, eigenvectors
-    
+
     def _regularize_cov(self, cov):
         eigenvalues, eigenvectors = self._regularized_eigh(cov)
         return (eigenvectors * eigenvalues[None, :]) @ eigenvectors.T
@@ -145,10 +145,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
     def _inv_sqrt(self, cov):
         eigenvalues, eigenvectors = self._regularized_eigh(cov)
 
-        return (
-            eigenvectors
-            * (1.0 / np.sqrt(eigenvalues))[None, :]
-        ) @ eigenvectors.T
+        return (eigenvectors * (1.0 / np.sqrt(eigenvalues))[None, :]) @ eigenvectors.T
 
     def _metric(self, mu_c, cov_c, mu_p, cov_p):
         cov_c = self._regularize_cov(cov_c)
@@ -178,9 +175,9 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
 
 
 def build_convergence_metric(name):
-    registry = {
-        'gaussian_posterior_drift': GaussianPosteriorDrift
-    }
+    registry = {"gaussian_posterior_drift": GaussianPosteriorDrift}
     if name not in registry:
-        raise ValueError(f"Unknown convergence metric: '{name}'. Available: {list(registry)}")
+        raise ValueError(
+            f"Unknown convergence metric: '{name}'. Available: {list(registry)}"
+        )
     return registry[name](name=name)

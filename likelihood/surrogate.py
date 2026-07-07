@@ -1,9 +1,11 @@
 import json
+from dataclasses import dataclass
+from pathlib import Path
+
 import tensorflow as tf
 
-from pathlib import Path
-from dataclasses import dataclass
 from .base import ParameterInfo
+
 
 @dataclass(frozen=True)
 class SurrogateMetadata:
@@ -39,10 +41,7 @@ class SurrogateMetadata:
 
     @property
     def bounds(self):
-        return {
-            param.name: (param.lower, param.upper)
-            for param in self.parameters
-        }
+        return {param.name: (param.lower, param.upper) for param in self.parameters}
 
     @property
     def scales(self):
@@ -50,40 +49,41 @@ class SurrogateMetadata:
 
     def save(self, path):
         data = {
-            'parameters': [
+            "parameters": [
                 {
-                    'name': param.name,
-                    'label': param.label,
-                    'scale': param.scale,
-                    'lower': param.lower,
-                    'upper': param.upper,
-                    'center': param.center,
-                    'sigma': param.sigma,
+                    "name": param.name,
+                    "label": param.label,
+                    "scale": param.scale,
+                    "lower": param.lower,
+                    "upper": param.upper,
+                    "center": param.center,
+                    "sigma": param.sigma,
                 }
                 for param in self.parameters
             ]
         }
 
-        Path(path).write_text(json.dumps(data, indent=2), encoding='utf-8')
+        Path(path).write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     @classmethod
     def load(cls, path):
-        data = json.loads(Path(path).read_text(encoding='utf-8'))
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
 
         parameters = tuple(
             ParameterInfo(
-                name=param['name'],
-                label=param['label'],
-                scale=param.get('scale', 1.0),
-                lower=param.get('lower'),
-                upper=param.get('upper'),
-                center=param.get('center'),
-                sigma=param.get('sigma'),
+                name=param["name"],
+                label=param["label"],
+                scale=param.get("scale", 1.0),
+                lower=param.get("lower"),
+                upper=param.get("upper"),
+                center=param.get("center"),
+                sigma=param.get("sigma"),
             )
-            for param in data['parameters']
+            for param in data["parameters"]
         )
 
         return cls(parameters=parameters)
+
 
 class SurrogateLikelihood:
     def __init__(self, model, metadata):
@@ -97,8 +97,8 @@ class SurrogateLikelihood:
         lower = []
         upper = []
         for param in self._params:
-            lower.append(-float('inf') if param.lower is None else param.lower)
-            upper.append(float('inf') if param.upper is None else param.upper)
+            lower.append(-float("inf") if param.lower is None else param.lower)
+            upper.append(float("inf") if param.upper is None else param.upper)
         self._lower = tf.constant(lower, dtype=tf.float32)
         self._upper = tf.constant(upper, dtype=tf.float32)
 
@@ -109,10 +109,9 @@ class SurrogateLikelihood:
     def logprior(self, positions):
         # Return zero inside the surrogate bounds and -inf outside them.
         in_bounds = tf.reduce_all(
-            (positions >= self._lower) & (positions <= self._upper),
-            axis=1
+            (positions >= self._lower) & (positions <= self._upper), axis=1
         )
-        return tf.where(in_bounds, 0.0, -float('inf'))
+        return tf.where(in_bounds, 0.0, -float("inf"))
 
     def logpost(self, positions):
         return self.loglkl(positions) + self.logprior(positions)

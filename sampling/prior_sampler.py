@@ -1,6 +1,6 @@
 import numpy as np
-
 from scipy.stats import qmc
+
 
 def _scale_unit_samples_to_bounds(unit_samples, prior_bounds):
     samples = np.zeros_like(unit_samples)
@@ -8,25 +8,29 @@ def _scale_unit_samples_to_bounds(unit_samples, prior_bounds):
         samples[:, i] = lower + unit_samples[:, i] * (upper - lower)
     return samples
 
+
 def _lhc_samples(prior_bounds, n_samples):
     sampler = qmc.LatinHypercube(d=len(prior_bounds))
     return _scale_unit_samples_to_bounds(sampler.random(n=n_samples), prior_bounds)
+
 
 def _sobol_samples(prior_bounds, n_samples):
     sampler = qmc.Sobol(d=len(prior_bounds), scramble=True)
     unit_samples = sampler.random(n=n_samples)
     return _scale_unit_samples_to_bounds(unit_samples, prior_bounds)
 
+
 def _uniform_samples(prior_bounds, n_samples):
     unit_samples = np.random.rand(n_samples, len(prior_bounds))
     return _scale_unit_samples_to_bounds(unit_samples, prior_bounds)
 
-def sample_prior(likelihood, n_samples, strategy='lhs'):
+
+def sample_prior(likelihood, n_samples, strategy="lhs"):
     prior_bounds = likelihood.prior_bounds
-    if strategy == 'lhs':
+    if strategy == "lhs":
         return _lhc_samples(prior_bounds, n_samples)
-    if strategy == 'sobol':
+    if strategy == "sobol":
         return _sobol_samples(prior_bounds, n_samples)
-    if strategy == 'uniform':
+    if strategy == "uniform":
         return _uniform_samples(prior_bounds, n_samples)
     raise ValueError(f"Unknown sampling strategy: {strategy}")

@@ -1,5 +1,4 @@
 import shutil
-
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -8,12 +7,13 @@ from typing import Optional
 from config.config import Config
 
 _SUBDIRS = (
-    'likelihood_input',
-    'training_data',
-    'trained_models',
-    'training_history',
-    'convergence_stats',
+    "likelihood_input",
+    "training_data",
+    "trained_models",
+    "training_history",
+    "convergence_stats",
 )
+
 
 @dataclass(frozen=True)
 class Run:
@@ -23,7 +23,9 @@ class Run:
     is_new: bool
     retrain: bool
     start_iteration: int
-    requested_iterations: Optional[int]  # explicit --iterations (None => use convergence)
+    requested_iterations: Optional[
+        int
+    ]  # explicit --iterations (None => use convergence)
 
     @staticmethod
     def _iteration_numbers(directory: Path, pattern: str) -> list[int]:
@@ -33,7 +35,7 @@ class Run:
         iterations = []
         for path in directory.glob(pattern):
             try:
-                iterations.append(int(path.stem.split('_')[-1]))
+                iterations.append(int(path.stem.split("_")[-1]))
             except ValueError:
                 continue
         return iterations
@@ -47,7 +49,7 @@ class Run:
         2) the sole file in likelihood_input/ if exactly one exists
         3) leave config unchanged
         """
-        li_dir = run_dir / 'likelihood_input'
+        li_dir = run_dir / "likelihood_input"
         if not li_dir.is_dir():
             return config
 
@@ -75,7 +77,7 @@ class Run:
 
         if not is_new:
             run_dir = path
-            yaml_files = list(run_dir.glob('*.yaml'))
+            yaml_files = list(run_dir.glob("*.yaml"))
             if not yaml_files:
                 raise FileNotFoundError(f"No YAML configuration found in {run_dir}")
             config = Config.from_yaml(yaml_files[0])
@@ -83,12 +85,12 @@ class Run:
 
             if args.start is None:
                 model_iterations = cls._iteration_numbers(
-                    run_dir / 'trained_models',
-                    'model_it_*.keras',
+                    run_dir / "trained_models",
+                    "model_it_*.keras",
                 )
                 data_iterations = cls._iteration_numbers(
-                    run_dir / 'training_data',
-                    'data_it_*.csv',
+                    run_dir / "training_data",
+                    "data_it_*.csv",
                 )
                 if not model_iterations and not data_iterations:
                     raise FileNotFoundError(
@@ -107,8 +109,8 @@ class Run:
             run_id = run_dir.name
         else:
             config = Config.from_yaml(path)
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            run_id = f'{timestamp}_{args.name}' if args.name else timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_id = f"{timestamp}_{args.name}" if args.name else timestamp
             run_dir = Path(args.output) / run_id
             start_iteration = 0
 
@@ -133,23 +135,23 @@ class Run:
     # ---- Directory layout ----
     @property
     def likelihood_input(self):
-        return self.run_dir / 'likelihood_input'
+        return self.run_dir / "likelihood_input"
 
     @property
     def training_data_dir(self):
-        return self.run_dir / 'training_data'
+        return self.run_dir / "training_data"
 
     @property
     def trained_models_dir(self):
-        return self.run_dir / 'trained_models'
+        return self.run_dir / "trained_models"
 
     @property
     def training_history_dir(self):
-        return self.run_dir / 'training_history'
+        return self.run_dir / "training_history"
 
     @property
     def convergence_stats_dir(self):
-        return self.run_dir / 'convergence_stats'
+        return self.run_dir / "convergence_stats"
 
     # ---- Launch behaviour ----
     @property
@@ -162,7 +164,7 @@ class Run:
             return self.config.convergence.max_iterations
         return self.requested_iterations + (
             1 if not self.is_new and not self.retrain else 0
-    )
+        )
 
     @property
     def final_iteration(self):
@@ -171,5 +173,5 @@ class Run:
     @property
     def mode(self):
         if self.is_new:
-            return 'new'
-        return 'continue (retrain)' if self.retrain else 'continue'
+            return "new"
+        return "continue (retrain)" if self.retrain else "continue"

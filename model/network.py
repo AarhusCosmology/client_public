@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from .activations import build_activation
 
+
 @tf.keras.utils.register_keras_serializable(package="CLiENT")
 class TargetDenormalization(tf.keras.layers.Layer):
     """
@@ -13,6 +14,7 @@ class TargetDenormalization(tf.keras.layers.Layer):
     and are therefore updated correctly when the surrogate is refreshed
     in-place between iterations.
     """
+
     def __init__(self, mean, std, **kwargs):
         super().__init__(**kwargs)
         self.initial_mean = float(mean)
@@ -38,11 +40,14 @@ class TargetDenormalization(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({
-            "mean": self.initial_mean,
-            "std": self.initial_std,
-        })
+        config.update(
+            {
+                "mean": self.initial_mean,
+                "std": self.initial_std,
+            }
+        )
         return config
+
 
 def build_model(inputs, targets, n_layers, n_neurons, activation):
     """
@@ -76,10 +81,13 @@ def build_model(inputs, targets, n_layers, n_neurons, activation):
         x = tf.keras.layers.Dense(n_neurons)(x)
         x = build_activation(activation)(x)
     z_pred = tf.keras.layers.Dense(1, name="standardized_loglkl")(x)
-    outputs = TargetDenormalization(mean=target_mean, std=target_std, name="loglkl_denormalization")(z_pred)
+    outputs = TargetDenormalization(
+        mean=target_mean, std=target_std, name="loglkl_denormalization"
+    )(z_pred)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
+
 
 def load_model(path):
     return tf.keras.models.load_model(path, compile=False)

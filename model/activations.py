@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+
 @tf.keras.utils.register_keras_serializable(package="CLiENT")
 class Alsing(tf.keras.layers.Layer):
     def __init__(self, initial_beta=1.0, initial_gamma=0.0, **kwargs):
@@ -29,13 +30,16 @@ class Alsing(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super().get_config()
-        config.update({
-            "initial_beta": self.initial_beta,
-            "initial_gamma": self.initial_gamma,
-        })
+        config.update(
+            {
+                "initial_beta": self.initial_beta,
+                "initial_gamma": self.initial_gamma,
+            }
+        )
         return config
 
+
 def build_activation(name):
-    if name == 'alsing':
+    if name == "alsing":
         return Alsing()
     return tf.keras.layers.Activation(name)

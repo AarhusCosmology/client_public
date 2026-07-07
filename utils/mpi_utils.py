@@ -1,6 +1,5 @@
 import numpy as np
 
-
 _MPI_CHECKED = False
 _COMM = None
 
@@ -32,11 +31,12 @@ def get_size():
     comm = _get_communicator()
     return comm.Get_size() if comm else 1
 
+
 def is_master():
     return _get_rank() == 0
 
 
-def print_master(message, end='\n'):
+def print_master(message, end="\n"):
     if is_master():
         print(message, end=end, flush=True)
 

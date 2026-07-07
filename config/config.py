@@ -1,6 +1,7 @@
+from dataclasses import dataclass
+
 import yaml
 
-from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class LikelihoodConfig:
@@ -10,9 +11,10 @@ class LikelihoodConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            wrapper=str(d['wrapper']),
-            input=str(d['input']),
+            wrapper=str(d["wrapper"]),
+            input=str(d["input"]),
         )
+
 
 @dataclass(frozen=True)
 class PriorConfig:
@@ -22,10 +24,10 @@ class PriorConfig:
 
     @classmethod
     def from_dict(cls, d):
-        n_sigma = d.get('n_sigma')
+        n_sigma = d.get("n_sigma")
         return cls(
-            n_samples=int(d['n_samples']),
-            sampling_strategy=str(d['sampling_strategy']),
+            n_samples=int(d["n_samples"]),
+            sampling_strategy=str(d["sampling_strategy"]),
             n_sigma=None if n_sigma is None else float(n_sigma),
         )
 
@@ -40,11 +42,12 @@ class AcquisitionConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            n_append=int(d['n_append']),
-            n_neighbors=int(d['n_neighbors']),
-            target_temperature=float(d['target_temperature']),
-            pool_factor=int(d['pool_factor']),
+            n_append=int(d["n_append"]),
+            n_neighbors=int(d["n_neighbors"]),
+            target_temperature=float(d["target_temperature"]),
+            pool_factor=int(d["pool_factor"]),
         )
+
 
 @dataclass(frozen=True)
 class ModelConfig:
@@ -55,10 +58,11 @@ class ModelConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            n_layers=int(d['n_layers']),
-            n_neurons=int(d['n_neurons']),
-            activation=str(d['activation']),
+            n_layers=int(d["n_layers"]),
+            n_neurons=int(d["n_neurons"]),
+            activation=str(d["activation"]),
         )
+
 
 @dataclass(frozen=True)
 class TrainingConfig:
@@ -73,14 +77,15 @@ class TrainingConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            learning_rate=float(d['learning_rate']),
-            loss=str(d['loss']),
-            sigma_level=float(d['sigma_level']),
-            n_epochs=int(d['n_epochs']),
-            batch_size=int(d['batch_size']),
-            validation_split=float(d['validation_split']),
-            patience=int(d['patience']),
+            learning_rate=float(d["learning_rate"]),
+            loss=str(d["loss"]),
+            sigma_level=float(d["sigma_level"]),
+            n_epochs=int(d["n_epochs"]),
+            batch_size=int(d["batch_size"]),
+            validation_split=float(d["validation_split"]),
+            patience=int(d["patience"]),
         )
+
 
 @dataclass(frozen=True)
 class SamplingConfig:
@@ -93,12 +98,13 @@ class SamplingConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            sampler=str(d['sampler']),
-            temperature=float(d['temperature']),
-            n_walkers=int(d['n_walkers']),
-            burn_in=int(d['burn_in']),
-            n_steps=int(d['n_steps']),
+            sampler=str(d["sampler"]),
+            temperature=float(d["temperature"]),
+            n_walkers=int(d["n_walkers"]),
+            burn_in=int(d["burn_in"]),
+            n_steps=int(d["n_steps"]),
         )
+
 
 @dataclass(frozen=True)
 class ConvergenceConfig:
@@ -109,10 +115,11 @@ class ConvergenceConfig:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            threshold=float(d['threshold']),
-            metric=str(d['metric']),
-            max_iterations=int(d['max_iterations']),
+            threshold=float(d["threshold"]),
+            metric=str(d["metric"]),
+            max_iterations=int(d["max_iterations"]),
         )
+
 
 @dataclass(frozen=True)
 class Config:
@@ -127,13 +134,13 @@ class Config:
     @classmethod
     def from_dict(cls, d):
         return cls(
-            likelihood=LikelihoodConfig.from_dict(d['likelihood']),
-            prior=PriorConfig.from_dict(d['prior']),
-            acquisition=AcquisitionConfig.from_dict(d['acquisition']),
-            model=ModelConfig.from_dict(d['model']),
-            training=TrainingConfig.from_dict(d['training']),
-            sampling=SamplingConfig.from_dict(d['sampling']),
-            convergence=ConvergenceConfig.from_dict(d['convergence']),
+            likelihood=LikelihoodConfig.from_dict(d["likelihood"]),
+            prior=PriorConfig.from_dict(d["prior"]),
+            acquisition=AcquisitionConfig.from_dict(d["acquisition"]),
+            model=ModelConfig.from_dict(d["model"]),
+            training=TrainingConfig.from_dict(d["training"]),
+            sampling=SamplingConfig.from_dict(d["sampling"]),
+            convergence=ConvergenceConfig.from_dict(d["convergence"]),
         )
 
     @classmethod

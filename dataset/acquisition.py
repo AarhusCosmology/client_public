@@ -1,10 +1,11 @@
 import numpy as np
 import tensorflow as tf
-
 from scipy.special import gammaln, logsumexp
+
 
 def _log_unit_ball_volume(ndim):
     return (ndim / 2.0) * np.log(np.pi) - gammaln(ndim / 2.0 + 1.0)
+
 
 def _deduplicate(chain, logposts):
     chain = np.asarray(chain)
@@ -24,10 +25,13 @@ def _deduplicate(chain, logposts):
     return (
         np.concatenate(points, axis=0),
         np.concatenate(point_logposts, axis=0),
-        np.concatenate(counts, axis=0)
+        np.concatenate(counts, axis=0),
     )
 
-def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperature, pool_factor):
+
+def select_points(
+    dataset, chain, logposts, surrogate, n_append, mcmc_temperature, pool_factor
+):
     knn_index = dataset.knn_index
     ndim = knn_index.ndim
     n_neighbors = dataset.n_neighbors
@@ -62,10 +66,7 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
     # Weighted sample without replacement
     pool_size = min(pool_factor * n_append, len(chain_unique))
     pool_indices = np.random.choice(
-        a=len(chain_unique),
-        size=pool_size,
-        replace=False,
-        p=weights
+        a=len(chain_unique), size=pool_size, replace=False, p=weights
     )
     pool = chain_unique[pool_indices]
 
@@ -113,7 +114,7 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
         positive = log_D > 0.0
         a[positive] = -np.expm1(-log_D[positive])
         a[~selected_mask] = 0.0
-        
+
         # Normalize the retention factors and sample without replacement
         a_sum = np.sum(a)
         if not np.isfinite(a_sum) or a_sum <= 0.0:
@@ -123,20 +124,24 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
         next_index = np.random.choice(
             a=pool_size,
             p=a,
-        )  
+        )
         selected_indices.append(next_index)
         selected_mask[next_index] = False
         n_current += 1
 
         # Distance from every pool point to the newly selected point
-        new_distance = np.sqrt(((pool_whitened - pool_whitened[next_index]) ** 2).sum(axis=1))
+        new_distance = np.sqrt(
+            ((pool_whitened - pool_whitened[next_index]) ** 2).sum(axis=1)
+        )
 
         # Keep the k smallest distances from each pool point to
         # the current training data plus all selected points
         worst_indices = np.argmax(current_distances, axis=1)
         worst_distances = current_distances[pool_rows, worst_indices]
         improved = new_distance < worst_distances
-        current_distances[pool_rows[improved], worst_indices[improved]] = new_distance[improved]
+        current_distances[pool_rows[improved], worst_indices[improved]] = new_distance[
+            improved
+        ]
 
         # The selected point itself should not be treated as a future query candidate
         current_distances[next_index] = np.inf
