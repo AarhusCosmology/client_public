@@ -49,7 +49,7 @@ def train_model(
         )
         metrics = {
             "epoch": best_epoch_idx + 1,
-            "train_loss": float(history.history["loss"][best_epoch_idx]),
+            "loss": float(history.history["loss"][best_epoch_idx]),
             "val_loss": float(history.history["val_loss"][best_epoch_idx]),
         }
         return history, metrics

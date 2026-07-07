@@ -259,7 +259,7 @@ def main():
             metrics_tracker.add_training_metrics(
                 iteration=iteration,
                 epoch=training_metrics["epoch"],
-                train_loss=training_metrics["train_loss"],
+                loss=training_metrics["loss"],
                 val_loss=training_metrics["val_loss"],
                 training_time=training_time,
             )

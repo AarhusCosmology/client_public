@@ -12,7 +12,7 @@ MINUTES_PER_HOUR = 60
 class TrainingMetrics:
     iteration: int
     epoch: int
-    train_loss: float
+    loss: float
     val_loss: float
     training_time: float
 
@@ -85,7 +85,7 @@ class MetricsTracker:
         self,
         iteration: int,
         epoch: int,
-        train_loss: float,
+        loss: float,
         val_loss: float,
         training_time: float,
     ) -> None:
@@ -95,7 +95,7 @@ class MetricsTracker:
             TrainingMetrics(
                 iteration=iteration,
                 epoch=epoch,
-                train_loss=train_loss,
+                loss=loss,
                 val_loss=val_loss,
                 training_time=training_time,
             ),
@@ -228,7 +228,7 @@ class MetricsTracker:
             [
                 m.iteration,
                 m.epoch,
-                f"{m.train_loss:.3g}",
+                f"{m.loss:.3g}",
                 f"{m.val_loss:.3g}",
                 self._format_duration(m.training_time),
             ]
@@ -238,7 +238,7 @@ class MetricsTracker:
             [
                 "avg",
                 f"{self._average(metrics, 'epoch'):.0f}",
-                f"{self._average(metrics, 'train_loss'):.3g}",
+                f"{self._average(metrics, 'loss'):.3g}",
                 f"{self._average(metrics, 'val_loss'):.3g}",
                 self._format_duration(self._average(metrics, "training_time")),
             ]
@@ -247,7 +247,7 @@ class MetricsTracker:
         self._write_table(
             f=f,
             title="Training Metrics",
-            headers=["it", "epoch", "train loss", "val loss", "time"],
+            headers=["it", "epoch", "loss", "val loss", "time"],
             rows=rows,
         )
 
