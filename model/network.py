@@ -44,7 +44,7 @@ class TargetDenormalization(tf.keras.layers.Layer):
         })
         return config
 
-def build_model(x_train, y_train, n_layers, n_neurons, activation):
+def build_model(inputs, targets, n_layers, n_neurons, activation):
     """
     Build a fully-connected model with input Normalization and output
     TargetDenormalization baked in.
@@ -56,27 +56,27 @@ def build_model(x_train, y_train, n_layers, n_neurons, activation):
 
     Parameters
     ----------
-    x_train : array-like, shape (N, ndim)
+    inputs : array-like, shape (N, ndim)
         Training inputs used to adapt the input normalisation layer.
-    y_train : array-like, shape (N,) or (N, 1)
+    targets : array-like, shape (N,) or (N, 1)
         Training targets in raw log-likelihood units.  Used only to
         compute the target mean and standard deviation for the output
         denormalisation layer.
     """
-    y_arr = np.asarray(y_train, dtype=np.float64).ravel()
-    y_mean = float(np.mean(y_arr))
-    y_std = float(np.std(y_arr))
+    target_array = np.asarray(targets, dtype=np.float64).ravel()
+    target_mean = float(np.mean(target_array))
+    target_std = float(np.std(target_array))
 
     norm = tf.keras.layers.Normalization()
-    norm.adapt(x_train)
+    norm.adapt(inputs)
 
-    inputs = tf.keras.Input(shape=(x_train.shape[1],))
+    inputs = tf.keras.Input(shape=(inputs.shape[1],))
     x = norm(inputs)
     for _ in range(n_layers):
         x = tf.keras.layers.Dense(n_neurons)(x)
         x = build_activation(activation)(x)
     z_pred = tf.keras.layers.Dense(1, name="standardized_loglkl")(x)
-    outputs = TargetDenormalization(mean=y_mean, std=y_std, name="loglkl_denormalization")(z_pred)
+    outputs = TargetDenormalization(mean=target_mean, std=target_std, name="loglkl_denormalization")(z_pred)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
     return model
