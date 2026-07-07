@@ -14,6 +14,7 @@ from utils.mpi_utils import (
 
 def main():
     using_mpi = is_mpi_available()
+    master = is_master()
     mpi_status = f"Enabled ({get_size()} processes)" if using_mpi else "Disabled"
     print_master(f"\nMPI status: {mpi_status}\n")
 
@@ -28,7 +29,7 @@ def main():
     args = parser.parse_args()
 
     # ---- Configuration (master loads the run and broadcasts it to workers) ----
-    if is_master():
+    if master:
         from run.run import Run
         from run.metrics import MetricsTracker
 
@@ -48,7 +49,7 @@ def main():
     else:
         run = None
         metrics_tracker = None
-    
+
     run = bcast(run)
     cfg = run.config
 
@@ -63,8 +64,9 @@ def main():
         likelihood.restrict_prior_bounds(cfg.prior.n_sigma)
     
     # ---- Surrogate metadata ----
-    if is_master():
-        from likelihood.surrogate import SurrogateMetadata
+    if master:
+        from likelihood.surrogate import SurrogateMetadata, SurrogateLikelihood
+        from dataset.dataset import TrainingDataset
         surrogate_metadata = SurrogateMetadata.from_likelihood(likelihood)
         if run.is_new:
             surrogate_metadata.save(run.run_dir / 'metadata.json')
@@ -75,7 +77,7 @@ def main():
     if run.is_new:
         print_master(f"Generating and evaluating {cfg.prior.n_samples} {cfg.prior.sampling_strategy} samples")
 
-        if is_master():
+        if master:
             from sampling.prior_sampler import sample_prior
             start_time = time.time()
             prior_samples = sample_prior(
@@ -91,14 +93,13 @@ def main():
             evaluator=likelihood.loglkl
         )
 
-        if is_master():
+        if master:
             valid = np.isfinite(targets)
             if not valid.all():
                 inputs, targets = inputs[valid], targets[valid]
                 print_master(f"Warning: filtered {valid.size - np.count_nonzero(valid)} targets with non-finite loglkl values")
             print_master(f"Finished in {time.time() - start_time:.1f}s\n")
 
-            from dataset.dataset import TrainingDataset
             dataset = TrainingDataset(
                 inputs=inputs,
                 targets=targets,
@@ -112,8 +113,7 @@ def main():
 
     # --- Training data (continue run) ----
     else:
-        if is_master():
-            from dataset.dataset import TrainingDataset
+        if master:
             dataset = TrainingDataset.load(
                 training_data_dir=run.training_data_dir,
                 likelihood=likelihood,
@@ -127,7 +127,7 @@ def main():
 
     # ---- Convergence metric ----
     previous_chain_summary = None
-    if is_master():
+    if master:
         from convergence.convergence import build_convergence_metric
         metric = build_convergence_metric(cfg.convergence.metric)
         if not run.is_new and run.start_iteration > 0:
@@ -136,17 +136,47 @@ def main():
     else:
         metric = None
 
+    final_iteration = run.final_iteration
+    use_convergence = run.use_convergence
+
+    # Hoist loop-invariant values and master-only imports out of the iteration loop.
+    if master:
+        ndim = likelihood.ndim
+        prior_bounds = np.asarray(list(likelihood.prior_bounds.values()), dtype=float)
+        prior_lower = prior_bounds[:, 0]
+        prior_upper = prior_bounds[:, 1]
+        inverse_sampling_temperature = 1.0 / cfg.sampling.temperature
+
+        import tensorflow as tf
+        from dataset.acquisition import select_points
+        from model.network import build_model, load_model
+        from sampling.sampler import build_sampler
+        from training.losses import build_loss
+        from training.training import train_model, save_history
+
     # ---- Main loop ----
-    for iteration in range(run.start_iteration, run.final_iteration + 1):
-        print_master(f"\n--- Iteration {iteration}/{run.final_iteration} ---")
-        if is_master():
+    for iteration in range(run.start_iteration, final_iteration + 1):
+        print_master(f"\n--- Iteration {iteration}/{final_iteration} ---")
+        if master:
             iteration_start_time = time.time()
+            model_path = run.trained_models_dir / f'model_it_{iteration}.keras'
+            # Train for new/retrain runs, after acquisition updates, or if a continued run has no saved model.
+            should_train = (
+                run.is_new
+                or run.retrain
+                or iteration != run.start_iteration
+                or not model_path.exists()
+            )
+            if should_train:
+                if not model_path.exists() and not run.is_new:
+                    print_master(f"No saved model found for iteration {iteration}; retraining...")
+                print_master(f"Training model on {len(dataset.inputs)} samples...")
+            else:
+                print_master(f"Loading existing model: {model_path}")
 
         # ---- Training ----
-        if is_master() and (run.is_new or run.retrain or iteration != run.start_iteration):
-            from model.network import build_model
-            from training.losses import build_loss
-            from training.training import train_model, save_history
+        if master and should_train:
+            tf.keras.backend.clear_session()
 
             # Shuffle the training data to avoid biasing the validation set
             shuffle_indices = np.random.permutation(len(dataset.inputs))
@@ -162,7 +192,7 @@ def main():
             loss = build_loss(
                 name=cfg.training.loss,
                 sigma_level=cfg.training.sigma_level,
-                chi2_dof=likelihood.ndim,
+                chi2_dof=ndim,
                 max_loglkl=float(targets.max())
             )
             history, training_metrics = train_model(
@@ -176,7 +206,7 @@ def main():
                 validation_split=cfg.training.validation_split,
                 patience=cfg.training.patience
             )
-            model.save(run.trained_models_dir / f'model_it_{iteration}.keras')
+            model.save(model_path)
             save_history(
                 history.history,
                 run.training_history_dir / f'history_it_{iteration}.csv'
@@ -190,16 +220,11 @@ def main():
             )
 
         # ---- Surrogate ----
-        if is_master():
-            import tensorflow as tf
-            from model.network import load_model
-            from likelihood.surrogate import SurrogateLikelihood
-            from sampling.sampler import build_sampler
-
-            # Clear the session to avoid potential issues with staleness
-            tf.keras.backend.clear_session()
-
-            model = load_model(run.trained_models_dir / f'model_it_{iteration}.keras')
+        if master:
+            # Reuse the freshly trained model in memory; only load from disk for already-trained iterations.
+            if not should_train:
+                tf.keras.backend.clear_session()
+                model = load_model(model_path)
             surrogate = SurrogateLikelihood(
                 model=model,
                 metadata=surrogate_metadata,
@@ -207,18 +232,18 @@ def main():
 
             # ---- Sampling ----
             def tempered_logpost_fn(positions):
-                return surrogate.logpost(positions) / cfg.sampling.temperature
+                return surrogate.logpost(positions) * inverse_sampling_temperature
 
             sampler = build_sampler(
                 name=cfg.sampling.sampler,
                 n_walkers=cfg.sampling.n_walkers,
-                ndim=likelihood.ndim,
+                ndim=ndim,
                 log_prob_fn=tempered_logpost_fn
             )
             initial_positions = np.random.uniform(
-                low=[b[0] for b in likelihood.prior_bounds.values()],
-                high=[b[1] for b in likelihood.prior_bounds.values()],
-                size=(cfg.sampling.n_walkers, likelihood.ndim)
+                low=prior_lower,
+                high=prior_upper,
+                size=(cfg.sampling.n_walkers, ndim)
             )
             sampling_start_time = time.time()
             sampler.run(
@@ -232,16 +257,19 @@ def main():
             acceptance = sampler.acceptance_fraction().numpy()
             sampler.reset()
 
+            mean_acceptance = float(np.mean(acceptance))
+            print_master(f"Finished sampling in {sampling_elapsed_time:.1f}s (acceptance rate: {mean_acceptance:.3f})")
+
             metrics_tracker.add_sampling_metrics(
                 iteration=iteration,
                 steps_per_walker=cfg.sampling.n_steps,
-                acceptance_rate=float(np.mean(acceptance)),
+                acceptance_rate=mean_acceptance,
                 sampling_time=sampling_elapsed_time
             )
         
         # ---- Convergence check ----
         converged = False
-        if is_master():
+        if master:
             chain_summary = metric.summarise(chain)
             metric.save_chain_summary(
                 convergence_stats_dir=run.convergence_stats_dir,
@@ -255,6 +283,7 @@ def main():
                     current_chain_summary=chain_summary,
                     previous_chain_summary=previous_chain_summary
                 )
+                print_master(f"{metric.name}: {metric_value:.4e} (threshold: {cfg.convergence.threshold:.4e})")
                 converged = metric_value < cfg.convergence.threshold
                 metrics_tracker.add_convergence_metrics(
                     iteration=iteration,
@@ -262,14 +291,15 @@ def main():
                     converged=converged,
                     metric_name=metric.name
                 )
-                if run.use_convergence and converged:
+                if use_convergence and converged:
                     print_master(f"Convergence criterion met, stopping...")
             previous_chain_summary = chain_summary
 
-        if run.use_convergence:
+        # Broadcast the stopping decision so all ranks leave the loop together.
+        if use_convergence:
             converged = bcast(converged)
             if converged:
-                if is_master():
+                if master:
                     iteration_elapsed_time = time.time() - iteration_start_time
                     metrics_tracker.add_iteration_metrics(
                         iteration=iteration,
@@ -279,11 +309,10 @@ def main():
                 break
         
         # ---- Acquisition ----
-        if iteration < run.final_iteration:
+        if iteration < final_iteration:
             print_master(f"Selecting and evaluating {cfg.acquisition.n_append} new samples from surrogate chain")
 
-            if is_master():
-                from dataset.acquisition import select_points
+            if master:
                 acquisition_start_time = time.time()
                 new_samples = select_points(
                     dataset=dataset,
@@ -302,7 +331,7 @@ def main():
                 evaluator=likelihood.loglkl
             )
 
-            if is_master():
+            if master:
                 valid = np.isfinite(new_targets)
                 if not valid.all():
                     new_inputs, new_targets = new_inputs[valid], new_targets[valid]
@@ -316,14 +345,14 @@ def main():
                 dataset.save(run.training_data_dir / f'data_it_{iteration + 1}.csv')
                 n_new_inputs = len(dataset.inputs) - n_current_inputs
                 acquisition_elapsed_time = time.time() - acquisition_start_time
-                print_master(f"Added {n_new_inputs} new training samples in {acquisition_elapsed_time:.2f}s for a total of {len(dataset.inputs)} samples")
+                print_master(f"Added {n_new_inputs} new training samples in {acquisition_elapsed_time:.1f}s for a total of {len(dataset.inputs)} samples")
                 metrics_tracker.add_acquisition_metrics(
                     iteration=iteration,
                     n_evaluated=len(new_inputs),
                     n_added=n_new_inputs,
                     acquisition_time=acquisition_elapsed_time
                 )
-        if is_master():
+        if master:
             iteration_elapsed_time = time.time() - iteration_start_time
             metrics_tracker.add_iteration_metrics(
                 iteration=iteration,
@@ -332,7 +361,7 @@ def main():
             metrics_tracker.save_progress_metrics(iteration)
 
     # ---- Finalisation ----
-    if is_master():
+    if master:
         metrics_tracker.save_all_metrics()
         print_master(f"\nRun completed: {run.run_id}")
         print_master(f"Results saved in: {run.run_dir}")
