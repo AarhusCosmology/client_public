@@ -71,45 +71,25 @@ def bcast(obj, root=0):
     return comm.bcast(obj, root=root) if comm else obj
 
 
-def _broadcast_array(array, root=0):
-    comm = _get_communicator()
-    if comm is None:
-        return np.asarray(array)
-
-    is_root = _get_rank() == root
-    if is_root:
-        array = np.ascontiguousarray(array)
-        shape = array.shape
-        dtype = array.dtype
-    else:
-        array = None
-        shape = None
-        dtype = None
-
-    shape = comm.bcast(shape, root=root)
-    dtype = comm.bcast(dtype, root=root)
-    if not is_root:
-        array = np.empty(shape, dtype=dtype)
-
-    comm.Bcast(array, root=root)
-    return array
-
-
 def _evaluate_local(samples, evaluator):
     return np.asarray([evaluator(sample) for sample in samples])
 
 
-def _evaluate_distributed(samples, evaluator):
+def broadcast_and_evaluate(samples, evaluator):
+    """Evaluate master-owned samples across MPI ranks."""
     comm = _get_communicator()
     if comm is None:
-        return _evaluate_local(samples, evaluator)
+        points = np.asarray(samples)
+        return points, _evaluate_local(points, evaluator)
 
     if is_master():
+        points = np.asarray(samples)
         print_master(
-            f"Evaluating {len(samples)} samples with {get_size()} MPI processes..."
+            f"Evaluating {len(points)} samples with {get_size()} MPI processes..."
         )
-        chunks = np.array_split(samples, get_size(), axis=0)
+        chunks = np.array_split(points, get_size(), axis=0)
     else:
+        points = np.array([])
         chunks = None
 
     local_samples = comm.scatter(chunks, root=0)
@@ -117,12 +97,5 @@ def _evaluate_distributed(samples, evaluator):
     gathered_values = comm.gather(local_values, root=0)
 
     if is_master():
-        return np.concatenate(gathered_values)
-    return np.array([])
-
-
-def broadcast_and_evaluate(samples, evaluator):
-    """Broadcast master-owned samples and evaluate them across MPI ranks."""
-    points = _broadcast_array(samples)
-    values = _evaluate_distributed(points, evaluator)
-    return points, values
+        return points, np.concatenate(gathered_values)
+    return points, np.array([])
