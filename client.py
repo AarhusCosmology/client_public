@@ -367,7 +367,7 @@ def main():
 
             if master:
                 acquisition_start_time = time.time()
-                new_samples = select_points(
+                new_samples, acq_metrics = select_points(
                     dataset=dataset,
                     chain=chain,
                     logposts=logposts,
@@ -376,6 +376,21 @@ def main():
                     mcmc_temperature=cfg.sampling.temperature,
                     pool_factor=cfg.acquisition.pool_factor,
                 )
+
+                n_samples = logposts.size
+                n_unique = acq_metrics["n_unique"]
+                n_duplicates = n_samples - n_unique
+                unique_fraction = n_unique / n_samples
+                print_master(
+                    f"Identified {n_unique} unique samples from {n_samples} total samples "
+                    f"({n_duplicates} duplicates, unique fraction: {unique_fraction:.3f}, "
+                    f"max multiplicity: {acq_metrics['max_multiplicity']})"
+                )
+                if len(new_samples) < cfg.acquisition.n_append:
+                    print_master(
+                        f"Warning: selected only {len(new_samples)}/"
+                        f"{cfg.acquisition.n_append} requested acquisition samples"
+                    )
             else:
                 new_samples = None
 

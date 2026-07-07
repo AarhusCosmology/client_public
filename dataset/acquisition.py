@@ -47,18 +47,6 @@ def select_points(
     chain_unique, logposts_unique, counts = _deduplicate(chain, logposts)
     log_weights_unique = log_weight_coeff * logposts_unique + np.log(counts)
 
-    # Calculate and print the deduplication statistics
-    n_samples = int(np.prod(chain.shape[:-1]))
-    n_duplicates = n_samples - len(chain_unique)
-    unique_fraction = len(chain_unique) / n_samples
-    max_multiplicity = np.max(counts)
-    print(
-        f"Surrogate chain deduplication: "
-        f"{n_samples} samples -> {len(chain_unique)} unique "
-        f"({n_duplicates} duplicates, unique_fraction={unique_fraction:.3f}, "
-        f"max_multiplicity={max_multiplicity})"
-    )
-
     # Normalize the unique-point weights
     log_weights_unique = log_weights_unique - logsumexp(log_weights_unique)
     weights = np.exp(log_weights_unique)
@@ -118,7 +106,6 @@ def select_points(
         # Normalize the retention factors and sample without replacement
         a_sum = np.sum(a)
         if not np.isfinite(a_sum) or a_sum <= 0.0:
-            print("Density deficit exhausted: no under-represented candidates remain")
             break
         a = a / a_sum
         next_index = np.random.choice(
@@ -145,5 +132,9 @@ def select_points(
 
         # The selected point itself should not be treated as a future query candidate
         current_distances[next_index] = np.inf
+    metrics = {
+        "n_unique": len(chain_unique),
+        "max_multiplicity": int(np.max(counts)),
+    }
 
-    return pool[selected_indices]
+    return pool[selected_indices], metrics
