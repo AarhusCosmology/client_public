@@ -8,7 +8,7 @@ def save_history(history, path):
     pd.DataFrame(history).to_csv(path, index=False)
 
 def train_model(model, inputs, targets, loss, learning_rate, n_epochs,
-                batch_size, validation_split, patience, return_metrics=False):
+                batch_size, validation_split, patience, return_metrics=True):
     start_time = time.time() if return_metrics else None
 
     model.compile(
