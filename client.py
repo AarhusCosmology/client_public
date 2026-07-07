@@ -103,13 +103,12 @@ def main():
     # ---- Training data (new run) ----
     if run.is_new:
         print_master(
-            f"Generating and evaluating {cfg.prior.n_samples} {cfg.prior.sampling_strategy} samples"
+            f"Generating {cfg.prior.n_samples} {cfg.prior.sampling_strategy} samples"
         )
 
         if master:
             from sampling.prior_sampler import sample_prior
 
-            start_time = time.time()
             prior_samples = sample_prior(
                 likelihood=likelihood,
                 n_samples=cfg.prior.n_samples,
@@ -129,7 +128,6 @@ def main():
                 print_master(
                     f"Warning: filtered {valid.size - np.count_nonzero(valid)} targets with non-finite loglkl values"
                 )
-            print_master(f"Finished in {time.time() - start_time:.1f}s\n")
 
             dataset = TrainingDataset(
                 inputs=inputs,
@@ -197,7 +195,7 @@ def main():
     for iteration in range(run.start_iteration, final_iteration + 1):
         print_master(f"\n--- Iteration {iteration}/{final_iteration} ---")
         if master:
-            iteration_start_time = time.time()
+            iteration_start_time = time.monotonic()
             model_path = run.trained_models_dir / f"model_it_{iteration}.keras"
             # Train for new/retrain runs, after acquisition updates, or if a continued run has no saved model.
             should_train = (
@@ -239,6 +237,7 @@ def main():
                 chi2_dof=ndim,
                 max_loglkl=float(targets.max()),
             )
+            training_start_time = time.monotonic()
             history, training_metrics = train_model(
                 model=model,
                 inputs=inputs,
@@ -250,6 +249,8 @@ def main():
                 validation_split=cfg.training.validation_split,
                 patience=cfg.training.patience,
             )
+            training_time = time.monotonic() - training_start_time
+            print_master(f"Finished training in {training_time:.2f}s")
             model.save(model_path)
             save_history(
                 history.history,
@@ -260,7 +261,7 @@ def main():
                 epoch=training_metrics["epoch"],
                 train_loss=training_metrics["train_loss"],
                 val_loss=training_metrics["val_loss"],
-                training_time=training_metrics["training_time"],
+                training_time=training_time,
             )
             metrics_tracker.save_all_metrics()
 
@@ -288,12 +289,12 @@ def main():
             initial_positions = np.random.uniform(
                 low=prior_lower, high=prior_upper, size=(cfg.sampling.n_walkers, ndim)
             )
-            sampling_start_time = time.time()
+            sampling_start_time = time.monotonic()
             sampler.run(
                 n_steps=cfg.sampling.n_steps,
                 initial_positions=initial_positions,
             )
-            sampling_elapsed_time = time.time() - sampling_start_time
+            sampling_elapsed_time = time.monotonic() - sampling_start_time
 
             chain = sampler.chain(discard=cfg.sampling.burn_in).numpy()
             logposts = sampler.log_prob(discard=cfg.sampling.burn_in).numpy()
@@ -303,7 +304,7 @@ def main():
 
             mean_acceptance = float(np.mean(acceptance))
             print_master(
-                f"Finished sampling in {sampling_elapsed_time:.1f}s (acceptance rate: {mean_acceptance:.3f})"
+                f"Finished sampling in {sampling_elapsed_time:.2f}s (acceptance rate: {mean_acceptance:.2g})"
             )
 
             metrics_tracker.add_sampling_metrics(
@@ -333,7 +334,7 @@ def main():
                     previous_chain_summary=previous_chain_summary,
                 )
                 print_master(
-                    f"{metric.name}: {metric_value:.4e} (threshold: {cfg.convergence.threshold:.4e})"
+                    f"{metric.name}: {metric_value:.3g} (threshold: {cfg.convergence.threshold:.3g})"
                 )
                 converged = metric_value < cfg.convergence.threshold
                 metrics_tracker.add_convergence_metrics(
@@ -352,7 +353,7 @@ def main():
             converged = bcast(converged)
             if converged:
                 if master:
-                    iteration_elapsed_time = time.time() - iteration_start_time
+                    iteration_elapsed_time = time.monotonic() - iteration_start_time
                     metrics_tracker.add_iteration_metrics(
                         iteration=iteration,
                         iteration_time=iteration_elapsed_time,
@@ -363,11 +364,12 @@ def main():
         # ---- Acquisition ----
         if iteration < final_iteration:
             print_master(
-                f"Selecting and evaluating {cfg.acquisition.n_append} new samples from surrogate chain"
+                f"Selecting {cfg.acquisition.n_append} new samples from surrogate chain"
             )
 
             if master:
-                acquisition_start_time = time.time()
+                acquisition_start_time = time.monotonic()
+                n_samples = logposts.size
                 new_samples, acq_metrics = select_points(
                     dataset=dataset,
                     chain=chain,
@@ -378,13 +380,17 @@ def main():
                     pool_factor=cfg.acquisition.pool_factor,
                 )
 
-                n_samples = logposts.size
+                # The sampler output is no longer needed after
+                # acquisition; release it before likelihood evaluations.
+                chain = None
+                logposts = None
+
                 n_unique = acq_metrics["n_unique"]
                 n_duplicates = n_samples - n_unique
                 unique_fraction = n_unique / n_samples
                 print_master(
                     f"Identified {n_unique} unique samples from {n_samples} total samples "
-                    f"({n_duplicates} duplicates, unique fraction: {unique_fraction:.3f}, "
+                    f"({n_duplicates} duplicates, unique fraction: {unique_fraction:.3g}, "
                     f"max multiplicity: {acq_metrics['max_multiplicity']})"
                 )
                 if len(new_samples) < cfg.acquisition.n_append:
@@ -411,9 +417,9 @@ def main():
                 dataset.add_data(inputs=new_inputs, targets=new_targets)
                 dataset.save(run.training_data_dir / f"data_it_{iteration + 1}.csv")
                 n_new_inputs = len(dataset.inputs) - n_current_inputs
-                acquisition_elapsed_time = time.time() - acquisition_start_time
+                acquisition_elapsed_time = time.monotonic() - acquisition_start_time
                 print_master(
-                    f"Added {n_new_inputs} new training samples in {acquisition_elapsed_time:.1f}s for a total of {len(dataset.inputs)} samples"
+                    f"Added {n_new_inputs} new training samples in {acquisition_elapsed_time:.2f}s for a total of {len(dataset.inputs)} samples"
                 )
                 metrics_tracker.add_acquisition_metrics(
                     iteration=iteration,
@@ -424,12 +430,14 @@ def main():
                 )
                 metrics_tracker.save_all_metrics()
         if master:
-            iteration_elapsed_time = time.time() - iteration_start_time
+            iteration_elapsed_time = time.monotonic() - iteration_start_time
             metrics_tracker.add_iteration_metrics(
                 iteration=iteration,
                 iteration_time=iteration_elapsed_time,
             )
             metrics_tracker.save_all_metrics()
+
+            # Release remaining per-iteration objects.
             chain = None
             logposts = None
             surrogate = None

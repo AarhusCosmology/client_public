@@ -1,5 +1,3 @@
-import time
-
 import pandas as pd
 import tensorflow as tf
 from keras.callbacks import EarlyStopping
@@ -21,8 +19,6 @@ def train_model(
     patience,
     return_metrics=True,
 ):
-    start_time = time.time() if return_metrics else None
-
     model.compile(
         optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
         loss=loss,
@@ -55,7 +51,6 @@ def train_model(
             "epoch": best_epoch_idx + 1,
             "train_loss": float(history.history["loss"][best_epoch_idx]),
             "val_loss": float(history.history["val_loss"][best_epoch_idx]),
-            "training_time": time.time() - start_time,
         }
         return history, metrics
     return history

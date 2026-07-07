@@ -50,7 +50,7 @@ def bcast(obj, root=0):
 
 def _format_progress(done, total, elapsed):
     percent = 100.0 * done / total if total else 100.0
-    return f"Evaluated {done}/{total} samples ({percent:.1f}%) in {elapsed:.1f}s"
+    return f"Evaluated {done}/{total} samples ({percent:.1f}%) in {elapsed:.2f}s"
 
 
 def _progress_batch_size(n_processes):

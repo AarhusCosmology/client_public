@@ -70,8 +70,11 @@ class MetricsTracker:
         self.acquisition_metrics: dict[int, AcquisitionMetrics] = {}
         self.iteration_metrics: dict[int, IterationMetrics] = {}
         self.convergence_metrics: dict[int, ConvergenceMetrics] = {}
+        self._runtime_excluded_training_iterations: set[int] = set()
 
-        if self.metrics_json.exists() and (start_iteration > 0 or preserve_start_metrics):
+        if self.metrics_json.exists() and (
+            start_iteration > 0 or preserve_start_metrics
+        ):
             self._load_existing_metrics(start_iteration)
 
     @staticmethod
@@ -86,6 +89,7 @@ class MetricsTracker:
         val_loss: float,
         training_time: float,
     ) -> None:
+        self._runtime_excluded_training_iterations.discard(iteration)
         self._store_metric(
             self.training_metrics,
             TrainingMetrics(
@@ -172,7 +176,7 @@ class MetricsTracker:
         seconds = abs(seconds)
 
         if seconds < SECONDS_PER_MINUTE:
-            return f"{sign}{seconds:.1f}s"
+            return f"{sign}{seconds:.2f}s"
 
         rounded_seconds = round(seconds)
         minutes, remaining_seconds = divmod(rounded_seconds, SECONDS_PER_MINUTE)
@@ -224,8 +228,8 @@ class MetricsTracker:
             [
                 m.iteration,
                 m.epoch,
-                f"{m.train_loss:.6f}",
-                f"{m.val_loss:.6f}",
+                f"{m.train_loss:.3g}",
+                f"{m.val_loss:.3g}",
                 self._format_duration(m.training_time),
             ]
             for m in metrics
@@ -233,9 +237,9 @@ class MetricsTracker:
         rows.append(
             [
                 "avg",
-                f"{self._average(metrics, 'epoch'):.1f}",
-                f"{self._average(metrics, 'train_loss'):.6f}",
-                f"{self._average(metrics, 'val_loss'):.6f}",
+                f"{self._average(metrics, 'epoch'):.0f}",
+                f"{self._average(metrics, 'train_loss'):.3g}",
+                f"{self._average(metrics, 'val_loss'):.3g}",
                 self._format_duration(self._average(metrics, "training_time")),
             ]
         )
@@ -256,7 +260,7 @@ class MetricsTracker:
             [
                 m.iteration,
                 m.steps_per_walker,
-                f"{m.acceptance_rate:.3f}",
+                f"{m.acceptance_rate:.2g}",
                 self._format_duration(m.sampling_time),
             ]
             for m in metrics
@@ -265,7 +269,7 @@ class MetricsTracker:
             [
                 "avg",
                 f"{self._average(metrics, 'steps_per_walker'):.0f}",
-                f"{self._average(metrics, 'acceptance_rate'):.3f}",
+                f"{self._average(metrics, 'acceptance_rate'):.2g}",
                 self._format_duration(self._average(metrics, "sampling_time")),
             ]
         )
@@ -290,7 +294,6 @@ class MetricsTracker:
                 m.iteration,
                 m.n_evaluated,
                 m.n_added,
-                f"{m.acceptance_rate:.3f}",
                 m.dataset_size,
                 self._format_duration(m.acquisition_time),
             ]
@@ -301,7 +304,6 @@ class MetricsTracker:
                 "tot",
                 total_evaluated,
                 total_added,
-                "-",
                 "-",
                 self._format_duration(sum(m.acquisition_time for m in metrics)),
             ]
@@ -314,7 +316,6 @@ class MetricsTracker:
                 "it",
                 "evaluated",
                 "added",
-                "added/eval",
                 "dataset size",
                 "time",
             ],
@@ -327,7 +328,12 @@ class MetricsTracker:
             return
 
         training_by_it = {
-            m.iteration: m.training_time for m in self.training_metrics.values()
+            m.iteration: (
+                0.0
+                if m.iteration in self._runtime_excluded_training_iterations
+                else m.training_time
+            )
+            for m in self.training_metrics.values()
         }
         sampling_by_it = {
             m.iteration: m.sampling_time for m in self.sampling_metrics.values()
@@ -397,7 +403,7 @@ class MetricsTracker:
                 [
                     m.iteration,
                     m.metric_name,
-                    f"{m.metric_value:.8f}",
+                    f"{m.metric_value:.3g}",
                     str(m.converged),
                 ]
                 for m in metrics
@@ -459,3 +465,5 @@ class MetricsTracker:
         self.convergence_metrics = self._load_metric_map(
             data, "convergence", ConvergenceMetrics, through_start
         )
+        if self.preserve_start_metrics and start_iteration in self.training_metrics:
+            self._runtime_excluded_training_iterations.add(start_iteration)
