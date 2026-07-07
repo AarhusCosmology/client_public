@@ -88,15 +88,15 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
 
     # Compute the k-th nearest neighbor distances for the pool points
     pool_distances, _ = knn_index.query(pool)
-    selected_distances = np.full((pool_size, n_neighbors), np.inf)
+    current_distances = pool_distances.copy()
 
     selected_indices = []
     selected_mask = np.ones(pool_size, dtype=bool)
+    pool_rows = np.arange(pool_size)
 
     for _ in range(min(n_append, pool_size)):
         # Compute the k-th nearest neighbor distances for the merged set of points (current training data + selected points)
-        merged_distances = np.concatenate([pool_distances, selected_distances], axis=1)
-        r_k_merged = np.partition(merged_distances, n_neighbors - 1, axis=1)[:, n_neighbors - 1]
+        r_k_merged = np.max(current_distances, axis=1)
         log_rho_merged = np.log(n_neighbors) - log_ball_vol - ndim * np.log(r_k_merged)
 
         # Compute the next-point target number density
@@ -129,15 +129,14 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
         n_current += 1
 
         # Distance from every pool point to the newly selected point
-        new_distance = np.sqrt(((pool_whitened - pool_whitened[next_index]) ** 2).sum(axis=1, keepdims=True))
+        new_distance = np.sqrt(((pool_whitened - pool_whitened[next_index]) ** 2).sum(axis=1))
 
-        # Add the new selected point's distance to the existing selected distances
-        combined = np.concatenate([selected_distances, new_distance], axis=1)
-
-        # Keep the k smallest distances for each pool point
-        selected_distances = np.partition(combined, n_neighbors - 1, axis=1)[:, :n_neighbors]
+        # Keep the k smallest distances from each pool point to
+        # the current training data plus all selected points
+        worst_indices = np.argmax(current_distances, axis=1)
+        worst_distances = current_distances[pool_rows, worst_indices]
+        improved = new_distance < worst_distances
+        current_distances[pool_rows[improved], worst_indices[improved]] = new_distance[improved]
 
         # The selected point itself should not be treated as a future query candidate
-        selected_distances[next_index] = np.inf
-
-    return pool[selected_indices]
+        current_distances[next_index] = np.inf
