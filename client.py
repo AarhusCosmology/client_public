@@ -262,6 +262,7 @@ def main():
                 val_loss=training_metrics["val_loss"],
                 training_time=training_metrics["training_time"],
             )
+            metrics_tracker.save_all_metrics()
 
         # ---- Surrogate ----
         if master:
@@ -310,6 +311,7 @@ def main():
                 acceptance_rate=mean_acceptance,
                 sampling_time=sampling_elapsed_time,
             )
+            metrics_tracker.save_all_metrics()
 
         # ---- Convergence check ----
         converged = False
@@ -339,6 +341,7 @@ def main():
                     converged=converged,
                     metric_name=metric.name,
                 )
+                metrics_tracker.save_all_metrics()
                 if use_convergence and converged:
                     print_master("Convergence criterion met, stopping...")
             previous_chain_summary = chain_summary
@@ -402,6 +405,7 @@ def main():
                     n_added=n_new_inputs,
                     acquisition_time=acquisition_elapsed_time,
                 )
+                metrics_tracker.save_all_metrics()
         if master:
             iteration_elapsed_time = time.time() - iteration_start_time
             metrics_tracker.add_iteration_metrics(
