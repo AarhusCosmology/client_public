@@ -45,7 +45,6 @@ class MetricsTracker:
         self.results_dir = Path(results_dir)
         self.metrics_file = self.results_dir / "metrics.log"
         self.metrics_json = self.results_dir / "metrics.json"
-        self.start_iteration = start_iteration
         self.preserve_start_metrics = preserve_start_metrics
         self.training_metrics = []
         self.sampling_metrics = []
@@ -84,13 +83,13 @@ class MetricsTracker:
             iteration, n_evaluated, n_added, acquisition_time
         ))
     
-    def add_iteration_metrics(self, iteration: int, total_iteration_time: float) -> None:
+    def add_iteration_metrics(self, iteration: int, iteration_time: float) -> None:
         training = next((m for m in self.training_metrics if m.iteration == iteration), None)
         sampling = next((m for m in self.sampling_metrics if m.iteration == iteration), None)
         acquisition = next((m for m in self.acquisition_metrics if m.iteration == iteration), None)
 
         self._upsert_metric(self.iteration_metrics, IterationMetrics(
-            iteration, total_iteration_time, training, sampling, acquisition
+            iteration, iteration_time, training, sampling, acquisition
         ))
     
     def add_convergence_metrics(self, iteration: int, metric_value: float, converged: bool, metric_name: str = "metric") -> None:
