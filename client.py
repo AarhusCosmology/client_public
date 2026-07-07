@@ -299,6 +299,7 @@ def main():
             logposts = sampler.log_prob(discard=cfg.sampling.burn_in).numpy()
             acceptance = sampler.acceptance_fraction().numpy()
             sampler.reset()
+            sampler = None
 
             mean_acceptance = float(np.mean(acceptance))
             print_master(
@@ -356,7 +357,7 @@ def main():
                         iteration=iteration,
                         iteration_time=iteration_elapsed_time,
                     )
-                    metrics_tracker.save_progress_metrics(iteration)
+                    metrics_tracker.save_all_metrics()
                 break
 
         # ---- Acquisition ----
@@ -419,6 +420,7 @@ def main():
                     n_evaluated=len(new_inputs),
                     n_added=n_new_inputs,
                     acquisition_time=acquisition_elapsed_time,
+                    dataset_size=len(dataset.inputs),
                 )
                 metrics_tracker.save_all_metrics()
         if master:
@@ -427,7 +429,11 @@ def main():
                 iteration=iteration,
                 iteration_time=iteration_elapsed_time,
             )
-            metrics_tracker.save_progress_metrics(iteration)
+            metrics_tracker.save_all_metrics()
+            chain = None
+            logposts = None
+            surrogate = None
+            model = None
 
     # ---- Finalisation ----
     if master:
