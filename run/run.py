@@ -20,7 +20,7 @@ class Run:
     config: Config
     run_id: str
     run_dir: Path
-    is_continuation: bool
+    is_new: bool
     retrain: bool
     start_iteration: int
     requested_iterations: Optional[int]  # explicit --iterations (None => use convergence)
@@ -71,9 +71,9 @@ class Run:
     @classmethod
     def from_args(cls, args):
         path = Path(args.input_or_dir)
-        is_continuation = path.is_dir() and (path / 'training_data').exists()
+        is_new = path.is_file()
 
-        if is_continuation:
+        if not is_new:
             run_dir = path
             yaml_files = list(run_dir.glob('*.yaml'))
             if not yaml_files:
@@ -84,11 +84,11 @@ class Run:
             if args.start is None:
                 model_iterations = cls._iteration_numbers(
                     run_dir / 'trained_models',
-                    'trained_model_it_*.keras',
+                    'model_it_*.keras',
                 )
                 data_iterations = cls._iteration_numbers(
                     run_dir / 'training_data',
-                    'training_data_it_*.csv',
+                    'data_it_*.csv',
                 )
                 if not model_iterations and not data_iterations:
                     raise FileNotFoundError(
@@ -116,7 +116,7 @@ class Run:
             config=config,
             run_id=run_id,
             run_dir=run_dir,
-            is_continuation=is_continuation,
+            is_new=is_new,
             retrain=args.retrain,
             start_iteration=start_iteration,
             requested_iterations=args.iterations,
@@ -136,19 +136,19 @@ class Run:
         return self.run_dir / 'likelihood_input'
 
     @property
-    def training_data(self):
+    def training_data_dir(self):
         return self.run_dir / 'training_data'
 
     @property
-    def trained_models(self):
+    def trained_models_dir(self):
         return self.run_dir / 'trained_models'
 
     @property
-    def training_history(self):
+    def training_history_dir(self):
         return self.run_dir / 'training_history'
 
     @property
-    def convergence_stats(self):
+    def convergence_stats_dir(self):
         return self.run_dir / 'convergence_stats'
 
     # ---- Launch behaviour ----
@@ -157,24 +157,19 @@ class Run:
         return self.requested_iterations is None
 
     @property
-    def reuse_start_model(self):
-        model_path = self.trained_models / f'trained_model_it_{self.start_iteration}.keras'
-        return self.is_continuation and not self.retrain and model_path.exists()
-
-    @property
     def n_iterations(self):
         if self.requested_iterations is None:
             return self.config.convergence.max_iterations
-        # When reusing the starting model, that sampling/resampling pass is
-        # preparatory and should not count against requested additional models.
-        return self.requested_iterations + (1 if self.reuse_start_model else 0)
+        return self.requested_iterations + (
+            1 if not self.is_new and not self.retrain else 0
+    )
 
     @property
     def final_iteration(self):
         return self.start_iteration + self.n_iterations - 1
 
     @property
-    def mode_label(self):
-        if not self.is_continuation:
+    def mode(self):
+        if self.is_new:
             return 'new'
         return 'continue (retrain)' if self.retrain else 'continue'
