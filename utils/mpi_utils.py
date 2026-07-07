@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 
 _MPI_CHECKED = False
@@ -46,6 +48,15 @@ def bcast(obj, root=0):
     return comm.bcast(obj, root=root) if comm else obj
 
 
+def _format_progress(done, total, elapsed):
+    percent = 100.0 * done / total if total else 100.0
+    return f"Evaluated {done}/{total} samples ({percent:.1f}%) in {elapsed:.1f}s"
+
+
+def _progress_batch_size(n_processes):
+    return max(1, n_processes)
+
+
 def _evaluate_local(samples, evaluator):
     return np.asarray([evaluator(sample) for sample in samples])
 
@@ -55,22 +66,48 @@ def broadcast_and_evaluate(samples, evaluator):
     comm = _get_communicator()
     if comm is None:
         points = np.asarray(samples)
-        return points, _evaluate_local(points, evaluator)
+        total = len(points)
+        print_master(f"Evaluating {total} samples...")
+        start_time = time.monotonic()
+        values = []
+        batch_size = _progress_batch_size(get_size())
+        for start in range(0, total, batch_size):
+            end = min(start + batch_size, total)
+            values.append(_evaluate_local(points[start:end], evaluator))
+            print_master(_format_progress(end, total, time.monotonic() - start_time))
+        return points, np.concatenate(values) if values else np.array([])
 
     if is_master():
         points = np.asarray(samples)
-        print_master(
-            f"Evaluating {len(points)} samples with {get_size()} MPI processes..."
-        )
-        chunks = np.array_split(points, get_size(), axis=0)
+        total = len(points)
+        print_master(f"Evaluating {total} samples with {get_size()} MPI processes...")
     else:
         points = np.array([])
-        chunks = None
+        total = None
 
-    local_samples = comm.scatter(chunks, root=0)
-    local_values = _evaluate_local(local_samples, evaluator)
-    gathered_values = comm.gather(local_values, root=0)
+    total = comm.bcast(total, root=0)
+    start_time = time.monotonic()
+    gathered_values = []
+    batch_size = _progress_batch_size(get_size())
+
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        if is_master():
+            batch = points[start:end]
+            chunks = np.array_split(batch, get_size(), axis=0)
+        else:
+            chunks = None
+
+        local_samples = comm.scatter(chunks, root=0)
+        local_values = _evaluate_local(local_samples, evaluator)
+        batch_values = comm.gather(local_values, root=0)
+
+        if is_master():
+            gathered_values.append(np.concatenate(batch_values))
+            print_master(_format_progress(end, total, time.monotonic() - start_time))
 
     if is_master():
-        return points, np.concatenate(gathered_values)
+        if gathered_values:
+            return points, np.concatenate(gathered_values)
+        return points, np.array([])
     return points, np.array([])
