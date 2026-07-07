@@ -29,16 +29,24 @@ class BaseLikelihood(ABC):
         """
         pass
 
-    def get_param_names(self):
+    @property
+    def param_names(self):
         return [param.name for param in self._params]
     
-    def get_param_labels(self):
+    @property
+    def param_labels(self):
         return [param.label for param in self._params]
     
-    def get_param_scales(self):
+    @property
+    def param_scales(self):
         return [param.scale for param in self._params]
     
-    def get_prior_bounds(self):
+    @property
+    def ndim(self):
+        return len(self._params)
+    
+    @property
+    def prior_bounds(self):
         if self._effective_bounds is not None:
             return dict(self._effective_bounds)
         return {
@@ -62,7 +70,7 @@ class BaseLikelihood(ABC):
         """
         Return the additional bounds-based log-prior at ``x``. Returns zero inside the current effective bounds and negative infinity outside them. This does not reproduce any prior terms already evaluated by the backend. 
         """
-        bounds = self.get_prior_bounds()
+        bounds = self.prior_bounds
         for value, param in zip(x, self._params):
             lower, upper = bounds[param.name]
             if lower is not None and value < lower:

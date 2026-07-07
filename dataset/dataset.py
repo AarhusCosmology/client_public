@@ -43,7 +43,7 @@ class TrainingDataset:
         self.inputs = np.asarray(inputs, dtype=np.float32).copy()
         self.targets = np.asarray(targets, dtype=np.float32).reshape(-1, 1).copy()
         self.likelihood = likelihood
-        self.param_names = likelihood.get_param_names()
+        self.param_names = likelihood.param_names
         self.n_neighbors = n_neighbors
         self.target_temperature = target_temperature
         self.iteration = None
@@ -61,15 +61,15 @@ class TrainingDataset:
     @classmethod
     def load(cls, training_data_dir, likelihood, n_neighbors, target_temperature, iteration=None):
         # If no iteration is specified, load the latest available
-        # training_data_<iteration>.csv file.
+        # data_it_<iteration>.csv file.
         if iteration is None:
             iteration = max(
                 int(p.stem.rsplit('_', 1)[1])
                 for p in Path(training_data_dir).iterdir()
             )
-        path = Path(training_data_dir) / f'training_data_it_{iteration}.csv'
+        path = Path(training_data_dir) / f'data_it_{iteration}.csv'
         df = pd.read_csv(path)
-        param_names = likelihood.get_param_names()
+        param_names = likelihood.param_names
         inputs = df[param_names].to_numpy(dtype=np.float32)
         targets = df[['loglkl']].to_numpy(dtype=np.float32)
         dataset = cls(inputs, targets, likelihood, n_neighbors, target_temperature)

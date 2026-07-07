@@ -22,7 +22,7 @@ def _uniform_samples(prior_bounds, n_samples):
     return _scale_unit_samples_to_bounds(unit_samples, prior_bounds)
 
 def sample_prior(likelihood, n_samples, strategy='lhs'):
-    prior_bounds = likelihood.get_prior_bounds()
+    prior_bounds = likelihood.prior_bounds
     if strategy == 'lhs':
         return _lhc_samples(prior_bounds, n_samples)
     if strategy == 'sobol':

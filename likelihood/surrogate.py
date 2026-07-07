@@ -11,7 +11,10 @@ class SurrogateMetadata:
 
     @classmethod
     def from_likelihood(cls, likelihood):
-        bounds = likelihood.get_prior_bounds()
+        param_names = likelihood.param_names
+        param_labels = likelihood.param_labels
+        param_scales = likelihood.param_scales
+        bounds = likelihood.prior_bounds
 
         parameters = tuple(
             ParameterInfo(
@@ -21,11 +24,7 @@ class SurrogateMetadata:
                 lower=bounds[name][0],
                 upper=bounds[name][1],
             )
-            for name, label, scale in zip(
-                likelihood.get_param_names(),
-                likelihood.get_param_labels(),
-                likelihood.get_param_scales(),
-            )
+            for name, label, scale in zip(param_names, param_labels, param_scales)
         )
 
         return cls(parameters=parameters)
@@ -102,21 +101,6 @@ class SurrogateLikelihood:
             upper.append(float('inf') if param.upper is None else param.upper)
         self._lower = tf.constant(lower, dtype=tf.float32)
         self._upper = tf.constant(upper, dtype=tf.float32)
-
-    def get_param_names(self):
-        return [param.name for param in self._params]
-
-    def get_param_labels(self):
-        return [param.label for param in self._params]
-
-    def get_param_scales(self):
-        return [param.scale for param in self._params]
-
-    def get_prior_bounds(self):
-        return {
-            param.name: (param.lower, param.upper)
-            for param in self._params
-        }
 
     def loglkl(self, positions):
         # Evaluate the surrogate model at the input positions.
