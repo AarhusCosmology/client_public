@@ -1,45 +1,20 @@
-import os
-
 import numpy as np
 
-
-_MPI_ENV_VARS = (
-    'OMPI_COMM_WORLD_SIZE',
-    'OMPI_COMM_WORLD_RANK',
-    'PMI_SIZE',
-    'PMI_RANK',
-    'PMIX_RANK',
-    'MV2_COMM_WORLD_SIZE',
-    'SLURM_NTASKS',
-    'SLURM_PROCID',
-    'MPI_LOCALNRANKS',
-    'WORLD_SIZE',
-)
 
 _MPI_CHECKED = False
 _COMM = None
 
 
-def _detect_mpi_environment():
-    return any(os.environ.get(var) for var in _MPI_ENV_VARS)
-
-
 def _get_communicator():
     global _MPI_CHECKED, _COMM
     if not _MPI_CHECKED:
-        if _detect_mpi_environment():
-            try:
-                from mpi4py import MPI
-            except ImportError as exc:
-                raise RuntimeError(
-                    "MPI environment detected, but mpi4py is not available.\n"
-                    "Install it with: pip install mpi4py\n"
-                    f"Original error: {exc}"
-                ) from exc
+        try:
+            from mpi4py import MPI
+        except ImportError:
+            _COMM = None
+        else:
             comm = MPI.COMM_WORLD
             _COMM = comm if comm.Get_size() > 1 else None
-        else:
-            _COMM = None
         _MPI_CHECKED = True
     return _COMM
 
