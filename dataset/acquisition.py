@@ -140,3 +140,5 @@ def select_points(dataset, chain, logposts, surrogate, n_append, mcmc_temperatur
 
         # The selected point itself should not be treated as a future query candidate
         current_distances[next_index] = np.inf
+
+    return pool[selected_indices]
