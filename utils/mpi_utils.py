@@ -69,13 +69,9 @@ def broadcast_and_evaluate(samples, evaluator):
         total = len(points)
         print_master(f"Evaluating {total} samples...")
         start_time = time.monotonic()
-        values = []
-        batch_size = _progress_batch_size(get_size())
-        for start in range(0, total, batch_size):
-            end = min(start + batch_size, total)
-            values.append(_evaluate_local(points[start:end], evaluator))
-            print_master(_format_progress(end, total, time.monotonic() - start_time))
-        return points, np.concatenate(values) if values else np.array([])
+        values = _evaluate_local(points, evaluator)
+        print_master(_format_progress(total, total, time.monotonic() - start_time))
+        return points, values
 
     if is_master():
         points = np.asarray(samples)
