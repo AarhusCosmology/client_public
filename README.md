@@ -351,7 +351,7 @@ training:
   n_epochs: 5000            # Maximum training epochs
   batch_size: 128           # Training batch size
   loss: msre                # 'msre' or TensorFlow loss functions
-  kappa_sigma: 3            # MSRE transition scale (σ)
+  sigma_level: 3            # MSRE transition scale (σ)
   learning_rate: 0.0001     # Adam optimizer learning rate
   validation_split: 0.1     # Validation split fraction
   patience: 250             # Early stopping patience (epochs)
