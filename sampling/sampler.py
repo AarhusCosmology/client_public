@@ -171,7 +171,7 @@ class AffineInvariantEnsembleSampler:
         self._n_proposals = 0
 
 
-def build_sampler(n_walkers, ndim, log_prob_fn, name="aies"):
+def build_sampler(name, n_walkers, ndim, log_prob_fn):
     if name == "aies":
         return AffineInvariantEnsembleSampler(
             n_walkers=n_walkers,
