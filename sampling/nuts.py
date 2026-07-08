@@ -36,10 +36,10 @@ class NUTSampler(BaseSampler):
         self._n_proposals = 0
 
     @tf.function(jit_compile=True, reduce_retracing=True)
-    def _run_graph(self, n_steps, pos):
+    def _run_graph(self, n_steps, burn_in, pos):
         chain, (is_accepted, log_prob) = tfp.mcmc.sample_chain(
             num_results=n_steps,
-            num_burnin_steps=0,
+            num_burnin_steps=burn_in,
             current_state=pos,
             kernel=self._kernel,
             trace_fn=lambda _, pkr: (pkr.is_accepted, pkr.target_log_prob),
@@ -47,7 +47,7 @@ class NUTSampler(BaseSampler):
         accept_count = tf.reduce_sum(tf.cast(is_accepted, tf.int32), axis=0)
         return chain[-1], chain, log_prob, accept_count
 
-    def run(self, n_steps, initial_positions=None, progress=True):
+    def run(self, n_steps, initial_positions=None, burn_in=0, progress=True):
         if initial_positions is not None:
             self._initialize(initial_positions)
         if self._pos is None:
@@ -55,7 +55,9 @@ class NUTSampler(BaseSampler):
 
         if not progress:
             self._pos, self._chain, self._log_prob, self._accept_count = self._run_graph(
-                tf.convert_to_tensor(n_steps, dtype=tf.int32), self._pos
+                tf.convert_to_tensor(n_steps, dtype=tf.int32), 
+                tf.convert_to_tensor(burn_in, dtype=tf.int32),
+                self._pos
             )
             self._n_proposals = n_steps
             return
@@ -65,16 +67,24 @@ class NUTSampler(BaseSampler):
         pos = self._pos
         chain_chunks, log_prob_chunks = [], []
         total_accept_count = tf.zeros((self.n_chains,), dtype=tf.int32)
-        with tqdm(total=n_steps, unit="step") as pbar:
+
+        remaining_burn_in = burn_in
+
+        with tqdm(total=burn_in + n_steps, unit="step") as pbar:
             for start in range(0, n_steps, 100):
                 chunk_size = min(100, n_steps - start)
                 pos, chain, log_prob, accept_count = self._run_graph(
-                    tf.convert_to_tensor(chunk_size, dtype=tf.int32), pos
+                    tf.convert_to_tensor(chunk_size, dtype=tf.int32),
+                    tf.convert_to_tensor(remaining_burn_in, dtype=tf.int32), 
+                    pos
                 )
                 chain_chunks.append(chain)
                 log_prob_chunks.append(log_prob)
                 total_accept_count += accept_count
-                pbar.update(chunk_size)
+                pbar.update(remaining_burn_in + chunk_size)
+
+                remaining_burn_in = 0
+
         self._pos = pos
         self._chain = tf.concat(chain_chunks, axis=0)
         self._log_prob = tf.concat(log_prob_chunks, axis=0)
