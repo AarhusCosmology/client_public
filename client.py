@@ -187,7 +187,7 @@ def main():
 
         from dataset.acquisition import select_points
         from model.network import build_model, load_model
-        from sampling.sampler import build_sampler
+        from sampling.base import build_sampler
         from training.losses import build_loss
         from training.training import save_history, train_model
 
@@ -282,12 +282,14 @@ def main():
 
             sampler = build_sampler(
                 name=cfg.sampling.sampler,
-                n_walkers=cfg.sampling.n_walkers,
+                n_walkers_or_chains=cfg.sampling.n_walkers_or_chains,
                 ndim=ndim,
                 log_prob_fn=tempered_logpost_fn,
             )
             initial_positions = np.random.uniform(
-                low=prior_lower, high=prior_upper, size=(cfg.sampling.n_walkers, ndim)
+                low=prior_lower,
+                high=prior_upper,
+                size=(cfg.sampling.n_walkers_or_chains, ndim),
             )
             sampling_start_time = time.monotonic()
             sampler.run(
