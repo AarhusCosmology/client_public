@@ -7,7 +7,7 @@ import numpy as np
 class BaseConvergenceMetric(ABC):
     @abstractmethod
     def summarise(self, chain):
-        """chain: (n_steps, n_walkers, ndim) ensemble array. Returns a chain summary dict."""
+        """chain: (n_steps, n_walkers_or_chains, ndim) ensemble array. Returns a chain summary dict."""
         pass
 
     @abstractmethod
@@ -44,14 +44,14 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
 
         if chain.ndim != 3:
             raise ValueError(
-                f"chain must have shape (n_steps, n_walkers, ndim), got {chain.shape}"
+                f"chain must have shape (n_steps, n_walkers_or_chains, ndim), got {chain.shape}"
             )
-        n_steps, n_walkers, ndim = chain.shape
+        n_steps, n_walkers_or_chains, ndim = chain.shape
         if n_steps < 1:
             raise ValueError("chain must contain at least one step")
-        if n_walkers < 1:
-            raise ValueError("chain must contain at least one walker")
-        if n_steps * n_walkers < 2:
+        if n_walkers_or_chains < 1:
+            raise ValueError("chain must contain at least one walker or chain")
+        if n_steps * n_walkers_or_chains < 2:
             raise ValueError("At least two samples are needed")
         if ndim < 1:
             raise ValueError("chain must contain at least one parameter")
@@ -60,11 +60,11 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
 
     def summarise(self, chain):
         chain = self._validate_chain(chain)
-        n_steps, n_walkers, ndim = chain.shape
-        n_samples = n_steps * n_walkers
+        n_steps, n_walkers_or_chains, ndim = chain.shape
+        n_samples = n_steps * n_walkers_or_chains
 
         sum_x = np.zeros(ndim, dtype=np.float64)
-        for walker in range(n_walkers):
+        for walker in range(n_walkers_or_chains):
             walker_chain = chain[:, walker, :]
             if not np.all(np.isfinite(walker_chain)):
                 raise ValueError("chain contains NaN or infinite values")
@@ -72,7 +72,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
 
         mean = sum_x / n_samples
         scatter = np.zeros((ndim, ndim), dtype=np.float64)
-        for walker in range(n_walkers):
+        for walker in range(n_walkers_or_chains):
             centered = np.array(chain[:, walker, :], dtype=np.float64, copy=True)
             centered -= mean
             scatter += centered.T @ centered
