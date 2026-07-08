@@ -135,21 +135,54 @@ class AIESampler(BaseSampler):
         )
 
         return pos, logp, chain.stack(), log_prob.stack(), accept_count
+    
+    @tf.function(jit_compile=True, reduce_retracing=True)
+    def _run_graph_no_storage(self, n_steps, pos, logp):
+        def cond(i, pos, logp):
+            return i < n_steps
 
-    def run(self, n_steps, initial_positions=None, progress=True):
+        def body(i, pos, logp):
+            pos, logp, _ = self._step(pos, logp)
+            return i + 1, pos, logp
+
+        _, pos, logp = tf.while_loop(
+            cond,
+            body,
+            loop_vars=[
+                tf.constant(0, dtype=tf.int32),
+                pos,
+                logp,
+            ],
+            parallel_iterations=1,
+        )
+
+        return pos, logp
+
+    def run(self, n_steps, initial_positions=None, burn_in=0, progress=True):
         if initial_positions is not None:
             self._initialize(initial_positions)
         if self._pos is None or self._logp is None:
             raise ValueError("Sampler not initialized. Provide initial_positions.")
 
+        total_accept_count = tf.zeros((self.n_walkers,), dtype=tf.int32)
+
         if not progress:
-            self._pos, self._logp, self._chain, self._log_prob, self._accept_count = (
+            if burn_in:
+                self._pos, self._logp = self._run_graph_no_storage(
+                    tf.convert_to_tensor(burn_in, dtype=tf.int32),
+                    self._pos,
+                    self._logp,
+                )
+
+            self._pos, self._logp, self._chain, self._log_prob, accept_count = (
                 self._run_graph(
                     tf.convert_to_tensor(n_steps, dtype=tf.int32),
                     self._pos,
                     self._logp,
                 )
             )
+
+            self._accept_count = accept_count
             self._n_proposals = n_steps
             return
 
@@ -157,8 +190,17 @@ class AIESampler(BaseSampler):
 
         pos, logp = self._pos, self._logp
         chain_chunks, log_prob_chunks = [], []
-        total_accept_count = tf.zeros((self.n_walkers,), dtype=tf.int32)
-        with tqdm(total=n_steps, unit="step") as pbar:
+
+        with tqdm(total=burn_in + n_steps, unit="step") as pbar:
+            for start in range(0, burn_in, 1000):
+                chunk_size = min(1000, burn_in - start)
+                pos, logp = self._run_graph_no_storage(
+                    tf.convert_to_tensor(chunk_size, dtype=tf.int32),
+                    pos,
+                    logp,
+                )
+                pbar.update(chunk_size)
+
             for start in range(0, n_steps, 1000):
                 chunk_size = min(1000, n_steps - start)
                 pos, logp, chain, log_prob, accept_count = self._run_graph(
@@ -170,6 +212,7 @@ class AIESampler(BaseSampler):
                 log_prob_chunks.append(log_prob)
                 total_accept_count += accept_count
                 pbar.update(chunk_size)
+
         self._pos = pos
         self._logp = logp
         self._chain = tf.concat(chain_chunks, axis=0)

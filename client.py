@@ -295,11 +295,12 @@ def main():
             sampler.run(
                 n_steps=cfg.sampling.n_steps,
                 initial_positions=initial_positions,
+                burn_in=cfg.sampling.burn_in,
             )
             sampling_elapsed_time = time.monotonic() - sampling_start_time
 
-            chain = sampler.chain(discard=cfg.sampling.burn_in).numpy()
-            logposts = sampler.log_prob(discard=cfg.sampling.burn_in).numpy()
+            chain = sampler.chain().numpy()
+            logposts = sampler.log_prob().numpy()
             acceptance = sampler.acceptance_fraction().numpy()
             sampler.reset()
             sampler = None
