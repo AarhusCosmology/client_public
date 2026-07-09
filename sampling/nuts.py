@@ -7,12 +7,34 @@ from .base import BaseSampler
 class NUTSampler(BaseSampler):
     """
     No-U-Turn Sampler (Hoffman & Gelman 2014) via tfp.mcmc.NoUTurnSampler
+
+    When prior bounds are provided, the kernel is wrapped in a
+    TransformedTransitionKernel with a Sigmoid bijector so that leapfrog
+    integration runs in unconstrained space, where the log-posterior is
+    smooth everywhere and the -inf logprior walls are never encountered.
     """
 
-    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size):
+    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size, bounds=None):
         self.n_chains = n_chains
         self.ndim = ndim
         self.log_prob_fn = log_prob_fn
+
+        if initial_step_size is None:
+            initial_step_size = 0.5
+        initial_step_size = tf.cast(
+            tf.convert_to_tensor(initial_step_size), tf.float32
+        )
+        if bounds is not None:
+            self._lower = tf.cast(tf.convert_to_tensor(bounds[0]), tf.float32)
+            self._upper = tf.cast(tf.convert_to_tensor(bounds[1]), tf.float32)
+            self.bijector = tfp.bijectors.Sigmoid(low=self._lower, high=self._upper)
+            # Re-express the step-size guess in unconstrained units, where the
+            # sigmoid maps each parameter's full width onto an O(1) scale.
+            initial_step_size = initial_step_size / (self._upper - self._lower)
+        else:
+            self._lower = None
+            self._upper = None
+            self.bijector = tfp.bijectors.Identity()
         self.initial_step_size = initial_step_size
 
         self._pos = None
@@ -22,7 +44,12 @@ class NUTSampler(BaseSampler):
         self._n_proposals = 0
 
     def _initialize(self, initial_positions):
-        self._pos = tf.cast(tf.convert_to_tensor(initial_positions), tf.float32)
+        pos = tf.cast(tf.convert_to_tensor(initial_positions), tf.float32)
+        if self._lower is not None:
+            # Positions exactly on a bound map to +-inf in unconstrained space.
+            margin = 1e-6 * (self._upper - self._lower)
+            pos = tf.clip_by_value(pos, self._lower + margin, self._upper - margin)
+        self._pos = pos
         self._chain = None
         self._log_prob = None
         self._accept_count = None
@@ -35,20 +62,36 @@ class NUTSampler(BaseSampler):
             step_size=self.initial_step_size,
         )
 
-        adaptive_kernel = tfp.mcmc.DualAveragingStepSizeAdaptation(
+        transformed_kernel = tfp.mcmc.TransformedTransitionKernel(
             inner_kernel=inner_kernel,
+            bijector=self.bijector,
+        )
+
+        adaptive_kernel = tfp.mcmc.DualAveragingStepSizeAdaptation(
+            inner_kernel=transformed_kernel,
             num_adaptation_steps=burn_in,
             target_accept_prob=0.75,
         )
 
-        chain, (is_accepted, log_prob), kernel_results = tfp.mcmc.sample_chain(
+        chain, is_accepted, kernel_results = tfp.mcmc.sample_chain(
             num_results=n_steps,
             num_burnin_steps=0 if previous_kernel_results is not None else burn_in,
             current_state=pos,
             kernel=adaptive_kernel,
             previous_kernel_results=previous_kernel_results,
-            trace_fn=lambda _, pkr: (pkr.inner_results.is_accepted, pkr.inner_results.target_log_prob),
+            trace_fn=lambda _, pkr: pkr.inner_results.inner_results.is_accepted,
             return_final_kernel_results=True,
+        )
+        if self._lower is not None:
+            # float32 rounding in the sigmoid can place states an ulp outside
+            # the bounds, where the -inf logprior would poison the log-probs.
+            chain = tf.clip_by_value(chain, self._lower, self._upper)
+        # Recompute the log-posterior on the constrained states rather than
+        # undoing the bijector's Jacobian from the unconstrained-space value,
+        # which is not numerically stable for states on the bounds.
+        log_prob = tf.reshape(
+            self.log_prob_fn(tf.reshape(chain, (-1, self.ndim))),
+            tf.shape(chain)[:2],
         )
         accept_count = tf.reduce_sum(tf.cast(is_accepted, tf.int32), axis=0)
         return chain[-1], chain, log_prob, accept_count, kernel_results

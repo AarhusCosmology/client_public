@@ -44,6 +44,10 @@ class BaseLikelihood(ABC):
         return [param.scale for param in self._params]
 
     @property
+    def param_sigmas(self):
+        return [param.sigma for param in self._params]
+
+    @property
     def ndim(self):
         return len(self._params)
 
