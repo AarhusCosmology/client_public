@@ -23,7 +23,7 @@ class BaseSampler(ABC):
         pass
 
 
-def build_sampler(name, n_walkers_or_chains, ndim, log_prob_fn):
+def build_sampler(name, n_walkers_or_chains, ndim, log_prob_fn, initial_step_size=None):
     if name == "aies":
         from .aies import AIESampler
         return AIESampler(
@@ -32,7 +32,10 @@ def build_sampler(name, n_walkers_or_chains, ndim, log_prob_fn):
     if name == "nuts":
         from .nuts import NUTSampler
         return NUTSampler(
-            n_chains=n_walkers_or_chains, ndim=ndim, log_prob_fn=log_prob_fn
+            n_chains=n_walkers_or_chains,
+            ndim=ndim,
+            log_prob_fn=log_prob_fn,
+            initial_step_size=initial_step_size,
         )
     raise ValueError(
         f"Unknown sampler name: {name}. Available samplers: ['aies', 'nuts']"

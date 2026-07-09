@@ -53,6 +53,10 @@ class TrainingDataset:
     def knn_index(self):
         return self._knn_index
 
+    @property
+    def stds(self):
+        return np.std(self.inputs, axis=0)
+
     def save(self, path):
         df = pd.DataFrame(self.inputs, columns=self.param_names)
         df["loglkl"] = self.targets[:, 0]

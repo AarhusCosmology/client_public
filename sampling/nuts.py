@@ -9,18 +9,11 @@ class NUTSampler(BaseSampler):
     No-U-Turn Sampler (Hoffman & Gelman 2014) via tfp.mcmc.NoUTurnSampler
     """
 
-    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size=0.5, max_tree_depth=5):
+    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size=0.5):
         self.n_chains = n_chains
         self.ndim = ndim
         self.log_prob_fn = log_prob_fn
         self.initial_step_size = initial_step_size
-        self.max_tree_depth = max_tree_depth
-
-        self._kernel = tfp.mcmc.NoUTurnSampler(
-            target_log_prob_fn=log_prob_fn,
-            step_size=self.initial_step_size,
-            max_tree_depth=self.max_tree_depth,
-        )
 
         self._pos = None
         self._chain = None
@@ -36,16 +29,29 @@ class NUTSampler(BaseSampler):
         self._n_proposals = 0
 
     @tf.function(jit_compile=True, reduce_retracing=True)
-    def _run_graph(self, n_steps, burn_in, pos):
-        chain, (is_accepted, log_prob) = tfp.mcmc.sample_chain(
+    def _run_graph(self, n_steps, burn_in, pos, previous_kernel_results):
+        inner_kernel = tfp.mcmc.NoUTurnSampler(
+            target_log_prob_fn=self.log_prob_fn,
+            step_size=self.initial_step_size,
+        )
+
+        adaptive_kernel = tfp.mcmc.DualAveragingStepSizeAdaptation(
+            inner_kernel=inner_kernel,
+            num_adaptation_steps=burn_in,
+            target_accept_prob=0.75,
+        )
+
+        chain, (is_accepted, log_prob), kernel_results = tfp.mcmc.sample_chain(
             num_results=n_steps,
-            num_burnin_steps=burn_in,
+            num_burnin_steps=0 if previous_kernel_results is not None else burn_in,
             current_state=pos,
-            kernel=self._kernel,
-            trace_fn=lambda _, pkr: (pkr.is_accepted, pkr.target_log_prob),
+            kernel=adaptive_kernel,
+            previous_kernel_results=previous_kernel_results,
+            trace_fn=lambda _, pkr: (pkr.inner_results.is_accepted, pkr.inner_results.target_log_prob),
+            return_final_kernel_results=True,
         )
         accept_count = tf.reduce_sum(tf.cast(is_accepted, tf.int32), axis=0)
-        return chain[-1], chain, log_prob, accept_count
+        return chain[-1], chain, log_prob, accept_count, kernel_results
 
     def run(self, n_steps, initial_positions=None, burn_in=0, progress=True):
         if initial_positions is not None:
@@ -54,10 +60,11 @@ class NUTSampler(BaseSampler):
             raise ValueError("Sampler not initialized. Provide initial_positions.")
 
         if not progress:
-            self._pos, self._chain, self._log_prob, self._accept_count = self._run_graph(
-                tf.convert_to_tensor(n_steps, dtype=tf.int32), 
+            self._pos, self._chain, self._log_prob, self._accept_count, _ = self._run_graph(
+                tf.convert_to_tensor(n_steps, dtype=tf.int32),
                 tf.convert_to_tensor(burn_in, dtype=tf.int32),
-                self._pos
+                self._pos,
+                None,
             )
             self._n_proposals = n_steps
             return
@@ -67,23 +74,21 @@ class NUTSampler(BaseSampler):
         pos = self._pos
         chain_chunks, log_prob_chunks = [], []
         total_accept_count = tf.zeros((self.n_chains,), dtype=tf.int32)
-
-        remaining_burn_in = burn_in
+        kernel_results = None
 
         with tqdm(total=burn_in + n_steps, unit="step") as pbar:
             for start in range(0, n_steps, 100):
                 chunk_size = min(100, n_steps - start)
-                pos, chain, log_prob, accept_count = self._run_graph(
+                pos, chain, log_prob, accept_count, kernel_results = self._run_graph(
                     tf.convert_to_tensor(chunk_size, dtype=tf.int32),
-                    tf.convert_to_tensor(remaining_burn_in, dtype=tf.int32), 
-                    pos
+                    tf.convert_to_tensor(burn_in, dtype=tf.int32),
+                    pos,
+                    kernel_results,
                 )
                 chain_chunks.append(chain)
                 log_prob_chunks.append(log_prob)
                 total_accept_count += accept_count
-                pbar.update(remaining_burn_in + chunk_size)
-
-                remaining_burn_in = 0
+                pbar.update((burn_in if start == 0 else 0) + chunk_size)
 
         self._pos = pos
         self._chain = tf.concat(chain_chunks, axis=0)

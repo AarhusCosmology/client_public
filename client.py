@@ -281,10 +281,11 @@ def main():
                 return surrogate.logpost(positions) * inverse_sampling_temperature
 
             sampler = build_sampler(
-                name=cfg.sampling.sampler,
+                name='aies',
                 n_walkers_or_chains=cfg.sampling.n_walkers_or_chains,
                 ndim=ndim,
                 log_prob_fn=tempered_logpost_fn,
+                initial_step_size=dataset.stds,
             )
             initial_positions = np.random.uniform(
                 low=prior_lower,
