@@ -9,7 +9,7 @@ class NUTSampler(BaseSampler):
     No-U-Turn Sampler (Hoffman & Gelman 2014) via tfp.mcmc.NoUTurnSampler
     """
 
-    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size=0.5):
+    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size):
         self.n_chains = n_chains
         self.ndim = ndim
         self.log_prob_fn = log_prob_fn
