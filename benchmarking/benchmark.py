@@ -89,11 +89,8 @@ def load_surrogate(run_dir, iteration):
     return SurrogateLikelihood(model, metadata), metadata
 
 
-def load_training_samples(run_dir, iteration, param_names, skip_training_data):
+def load_training_samples(run_dir, iteration, param_names):
     import pandas as pd
-
-    if skip_training_data:
-        return None
 
     data_path = run_dir / "training_data" / f"data_it_{iteration}.csv"
     if not data_path.exists():
@@ -102,10 +99,10 @@ def load_training_samples(run_dir, iteration, param_names, skip_training_data):
     return pd.read_csv(data_path)[param_names].to_numpy()
 
 
-def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_bounds, param_names, surrogate):
+def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_bounds, param_names, surrogate, training_samples):
     import numpy as np
 
-    from sampling.sampler import build_sampler
+    from sampling.base import build_sampler
 
     sampler_name = sampling_config["sampler"]
     output_dir = run_dir / "benchmark_chains"
@@ -122,29 +119,34 @@ def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_
         print(f"Loaded chain: {chain.shape}")
         return chain_path, chain, log_prob
 
-    n_walkers = sampling_config["n_walkers"]
+    n_walkers_or_chains = sampling_config["n_walkers_or_chains"]
     burn_in = sampling_config["burn_in"]
-    print(f"Running {sampler_name} sampler: {n_walkers} walkers, {burn_in} burn-in, {n_steps} steps")
+    print(f"Running {sampler_name} sampler: {n_walkers_or_chains} walkers/chains, {burn_in} burn-in, {n_steps} steps")
 
     lower = np.asarray([bounds[0] for bounds in prior_bounds.values()], dtype=np.float32)
     upper = np.asarray([bounds[1] for bounds in prior_bounds.values()], dtype=np.float32)
     if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)):
         raise ValueError("Benchmark sampling requires finite prior bounds for all parameters")
 
+    sampler_kwargs = {}
+    if training_samples is not None:
+        sampler_kwargs["initial_step_size"] = training_samples.std(axis=0)
+
     sampler = build_sampler(
         name=sampler_name,
-        n_walkers=n_walkers,
+        n_walkers_or_chains=n_walkers_or_chains,
         ndim=len(param_names),
         log_prob_fn=surrogate.logpost,
+        **sampler_kwargs,
     )
     initial_positions = np.random.uniform(
         low=lower,
         high=upper,
-        size=(n_walkers, len(param_names)),
+        size=(n_walkers_or_chains, len(param_names)),
     )
-    sampler.run(initial_positions=initial_positions, n_steps=n_steps)
-    chain = sampler.chain(discard=burn_in, thin=thin).numpy()
-    log_prob = sampler.log_prob(discard=burn_in, thin=thin).numpy()
+    sampler.run(initial_positions=initial_positions, n_steps=n_steps, burn_in=burn_in)
+    chain = sampler.chain(thin=thin).numpy()
+    log_prob = sampler.log_prob(thin=thin).numpy()
     acceptance = sampler.acceptance_fraction().numpy()
     sampler.reset()
     np.savez(chain_path, chain=chain, log_prob=log_prob, acceptance_fraction=acceptance)
@@ -232,7 +234,7 @@ def main():
     getdist_names = getdist_names_for_params(param_names)
     getdist_ranges = getdist_ranges_for_params(param_names, getdist_names, prior_bounds)
 
-    training_samples = load_training_samples(run_dir, iteration, param_names, args.no_training_data)
+    training_samples = load_training_samples(run_dir, iteration, param_names)
     sampler_name = config["sampling"]["sampler"]
     chain_path, chain, log_prob = load_or_run_chain(
         run_dir,
@@ -243,6 +245,7 @@ def main():
         prior_bounds,
         param_names,
         surrogate,
+        training_samples,
     )
     samples, surrogate_convergence_available = make_getdist_samples(
         chain,
@@ -296,7 +299,7 @@ def main():
         plot_params,
         param_indices,
         getdist_ranges,
-        training_samples=training_samples,
+        training_samples=None if args.no_training_data else training_samples,
         surrogate_sampler=sampler_name,
         reference_sampler=reference_sampler,
     )

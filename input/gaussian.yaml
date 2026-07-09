@@ -28,11 +28,11 @@ training:
   patience: 250
 
 sampling:
-  sampler: aies
+  sampler: nuts
   temperature: 7.0
-  n_walkers: 216
-  n_steps: 100000
-  burn_in: 5000
+  n_walkers_or_chains: 256
+  n_steps: 200
+  burn_in: 500
 
 convergence:
   metric: gaussian_posterior_drift

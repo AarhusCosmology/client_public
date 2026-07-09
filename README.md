@@ -360,11 +360,12 @@ training:
 ### Sampling Configuration
 ```yaml
 sampling:
-  sampler: aies             # Built-in affine-invariant ensemble sampler
+  sampler: aies             # aies (affine-invariant ensemble) or nuts (No-U-Turn Sampler)
   temperature: 7.0          # MCMC temperature T_MCMC
-  n_walkers: 216            # Walkers in the ensemble
+  n_walkers_or_chains: 216  # Walkers (aies) or independent chains (other samplers)
   n_steps: 100000           # MCMC steps
   burn_in: 5000             # Burn-in steps to discard
+  step_size: 0.01           # Required for nuts; ignored by aies
 ```
 
 ### Convergence Configuration
