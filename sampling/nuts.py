@@ -14,16 +14,16 @@ class NUTSampler(BaseSampler):
     smooth everywhere and the -inf logprior walls are never encountered.
     """
 
-    def __init__(self, n_chains, ndim, log_prob_fn, initial_step_size, bounds=None):
+    def __init__(self, n_chains, ndim, log_prob_fn, covmat=None, bounds=None):
         self.n_chains = n_chains
         self.ndim = ndim
         self.log_prob_fn = log_prob_fn
 
-        if initial_step_size is None:
-            initial_step_size = 0.5
-        initial_step_size = tf.cast(
-            tf.convert_to_tensor(initial_step_size), tf.float32
-        )
+        if covmat is None:
+            initial_step_size = tf.fill((ndim,), tf.constant(0.5, dtype=tf.float32))
+        else:
+            covmat = tf.cast(tf.convert_to_tensor(covmat), tf.float32)
+            initial_step_size = tf.sqrt(tf.linalg.diag_part(covmat))
         if bounds is not None:
             self._lower = tf.cast(tf.convert_to_tensor(bounds[0]), tf.float32)
             self._upper = tf.cast(tf.convert_to_tensor(bounds[1]), tf.float32)

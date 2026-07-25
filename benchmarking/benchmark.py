@@ -130,7 +130,7 @@ def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_
 
     sampler_kwargs = {}
     if training_samples is not None:
-        sampler_kwargs["initial_step_size"] = training_samples.std(axis=0)
+        sampler_kwargs["covmat"] = np.diag(training_samples.var(axis=0))
 
     sampler = build_sampler(
         name=sampler_name,

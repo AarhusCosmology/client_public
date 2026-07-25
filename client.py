@@ -281,16 +281,17 @@ def main():
                 return surrogate.logpost(positions) * inverse_sampling_temperature
 
             if previous_chain_summary is not None:
-                iss = np.sqrt(np.diag(previous_chain_summary["cov"]))
+                covmat = previous_chain_summary["cov"]
             else:
-                iss = np.sqrt(cfg.sampling.temperature) * np.asarray(likelihood.param_sigmas, dtype=float)
+                param_sigmas = np.asarray(likelihood.param_sigmas, dtype=float)
+                covmat = np.diag(cfg.sampling.temperature * param_sigmas**2)
 
             sampler = build_sampler(
                 name=cfg.sampling.sampler,
                 n_walkers_or_chains=cfg.sampling.n_walkers_or_chains,
                 ndim=ndim,
                 log_prob_fn=tempered_logpost_fn,
-                initial_step_size=iss,
+                covmat=covmat,
                 bounds=(prior_lower, prior_upper),
             )
             initial_positions = np.random.uniform(
