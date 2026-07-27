@@ -6,7 +6,7 @@ import numpy as np
 
 class BaseConvergenceMetric(ABC):
     @abstractmethod
-    def summarise(self, chain):
+    def summarize(self, chain):
         """chain: (n_steps, n_walkers_or_chains, ndim) ensemble array. Returns a chain summary dict."""
         pass
 
@@ -58,7 +58,7 @@ class GaussianPosteriorDrift(BaseConvergenceMetric):
 
         return chain
 
-    def summarise(self, chain):
+    def summarize(self, chain):
         chain = self._validate_chain(chain)
         n_steps, n_walkers_or_chains, ndim = chain.shape
         n_samples = n_steps * n_walkers_or_chains

@@ -19,7 +19,7 @@ class MontePythonLikelihood(BaseLikelihood):
         # Load MontePython modules
         if montepython_path not in sys.path:
             sys.path.append(montepython_path)
-        from initialise import initialise as mp_initialise
+        from initialise import initialise as mp_initialize
         from sampler import compute_lkl
 
         # Create a temporary directory for MontePython output stored as an attribute
@@ -28,7 +28,7 @@ class MontePythonLikelihood(BaseLikelihood):
 
         # Initialize MontePython
         mp_command = f"run -p {param_path} --conf {conf_path} -o {self._temp_dir.name} --chain-number 0"
-        self.cosmo, self.data, _, _ = mp_initialise(mp_command)
+        self.cosmo, self.data, _, _ = mp_initialize(mp_command)
         self.compute_lkl = compute_lkl
 
         # Let BaseLikelihood extract parameters and initialize bounds state

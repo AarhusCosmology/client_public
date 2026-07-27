@@ -26,7 +26,7 @@ def main():
         "input_or_dir", help="Input YAML file (new run) or run directory (continue)"
     )
     parser.add_argument(
-        "-n", "--name", help="Run name/tag for organisation (new runs only)"
+        "-n", "--name", help="Run name/tag for organization (new runs only)"
     )
     parser.add_argument(
         "-o",
@@ -80,7 +80,7 @@ def main():
     cfg = run.config
 
     # ---- Likelihood ----
-    print_master("Initialising likelihood...")
+    print_master("initializing likelihood...")
 
     likelihood = build_likelihood(
         wrapper=cfg.likelihood.wrapper,
@@ -329,7 +329,7 @@ def main():
         # ---- Convergence check ----
         converged = False
         if master:
-            chain_summary = metric.summarise(chain)
+            chain_summary = metric.summarize(chain)
             metric.save_chain_summary(
                 convergence_stats_dir=run.convergence_stats_dir,
                 iteration=iteration,
@@ -454,7 +454,7 @@ def main():
             surrogate = None
             model = None
 
-    # ---- Finalisation ----
+    # ---- Finalization ----
     if master:
         metrics_tracker.save_all_metrics()
         print_master(f"\nRun completed: {run.run_id}")

@@ -64,18 +64,18 @@ def build_model(inputs, targets, n_layers, n_neurons, activation):
     TargetDenormalization baked in.
 
     The Normalization layer is adapted to x_train.  The trainable final
-    Dense(1) layer predicts a standardised internal variable z; the
+    Dense(1) layer predicts a standardized internal variable z; the
     non-trainable TargetDenormalization layer converts it back to raw
     log-likelihood units so the public model output is always in raw units.
 
     Parameters
     ----------
     inputs : array-like, shape (N, ndim)
-        Training inputs used to adapt the input normalisation layer.
+        Training inputs used to adapt the input normalization layer.
     targets : array-like, shape (N,) or (N, 1)
         Training targets in raw log-likelihood units.  Used only to
         compute the target mean and standard deviation for the output
-        denormalisation layer.
+        denormalization layer.
     """
     target_array = np.asarray(targets, dtype=np.float64).ravel()
     target_mean = float(np.mean(target_array))
