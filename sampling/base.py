@@ -38,6 +38,15 @@ def build_sampler(name, n_walkers_or_chains, ndim, log_prob_fn, covmat=None, bou
             covmat=covmat,
             bounds=bounds,
         )
+    if name == "hmc":
+        from .hmc import HMCSampler
+        return HMCSampler(
+            n_chains=n_walkers_or_chains,
+            ndim=ndim,
+            log_prob_fn=log_prob_fn,
+            covmat=covmat,
+            bounds=bounds,
+        )
     raise ValueError(
-        f"Unknown sampler name: {name}. Available samplers: ['aies', 'nuts']"
+        f"Unknown sampler name: {name}. Available samplers: ['aies', 'nuts', 'hmc']"
     )
