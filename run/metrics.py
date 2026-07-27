@@ -432,6 +432,9 @@ class MetricsTracker:
             "acquisition": self._metric_dicts(self.acquisition_metrics),
             "iteration": self._metric_dicts(self.iteration_metrics),
             "convergence": self._metric_dicts(self.convergence_metrics),
+            "runtime_excluded_training_iterations": sorted(
+                self._runtime_excluded_training_iterations
+            ),
         }
         with open(self.metrics_json, "w") as f:
             json.dump(data, f, indent=2)
@@ -465,5 +468,10 @@ class MetricsTracker:
         self.convergence_metrics = self._load_metric_map(
             data, "convergence", ConvergenceMetrics, through_start
         )
+        self._runtime_excluded_training_iterations = {
+            int(iteration)
+            for iteration in data.get("runtime_excluded_training_iterations", [])
+            if int(iteration) in self.training_metrics
+        }
         if self.preserve_start_metrics and start_iteration in self.training_metrics:
             self._runtime_excluded_training_iterations.add(start_iteration)
