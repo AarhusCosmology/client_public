@@ -12,6 +12,13 @@ class NUTSampler(BaseSampler):
     TransformedTransitionKernel with a Sigmoid bijector so that leapfrog
     integration runs in unconstrained space, where the log-posterior is
     smooth everywhere and the -inf logprior walls are never encountered.
+
+    When a covariance matrix is provided, a whitening bijector is composed
+    inside the Sigmoid so that leapfrog integration runs in a space where the
+    target has unit covariance. This acts as a dense mass matrix: the dual
+    averaging adaptation only ever rescales the step size globally, so the
+    relative scales and correlations between parameters have to be supplied
+    up front or NUTS pays for them in tree depth.
     """
 
     def __init__(self, n_chains, ndim, log_prob_fn, covmat=None, bounds=None):
@@ -19,22 +26,45 @@ class NUTSampler(BaseSampler):
         self.ndim = ndim
         self.log_prob_fn = log_prob_fn
 
-        if covmat is None:
-            initial_step_size = tf.fill((ndim,), tf.constant(0.5, dtype=tf.float32))
-        else:
-            covmat = tf.cast(tf.convert_to_tensor(covmat), tf.float32)
-            initial_step_size = tf.sqrt(tf.linalg.diag_part(covmat))
         if bounds is not None:
             self._lower = tf.cast(tf.convert_to_tensor(bounds[0]), tf.float32)
             self._upper = tf.cast(tf.convert_to_tensor(bounds[1]), tf.float32)
-            self.bijector = tfp.bijectors.Sigmoid(low=self._lower, high=self._upper)
-            # Re-express the step-size guess in unconstrained units, where the
-            # sigmoid maps each parameter's full width onto an O(1) scale.
-            initial_step_size = initial_step_size / (self._upper - self._lower)
+            bijectors = [tfp.bijectors.Sigmoid(low=self._lower, high=self._upper)]
+            # d(unconstrained)/d(constrained) for the sigmoid, evaluated at the
+            # midpoint of the bounds where it has the closed form 4 / (u - l).
+            # The posterior sits deep inside the bounds, where the sigmoid is
+            # near-affine, so this linearization is accurate over its support.
+            jacobian = 4.0 / (self._upper - self._lower)
         else:
             self._lower = None
             self._upper = None
-            self.bijector = tfp.bijectors.Identity()
+            bijectors = []
+            jacobian = None
+
+        if covmat is None:
+            # No geometry available: fall back to an isotropic step size,
+            # re-expressed in unconstrained units when a sigmoid is in play.
+            initial_step_size = tf.fill((ndim,), tf.constant(0.5, dtype=tf.float32))
+            if jacobian is not None:
+                initial_step_size = initial_step_size * jacobian
+        else:
+            covmat = tf.cast(tf.convert_to_tensor(covmat), tf.float32)
+            if jacobian is not None:
+                covmat = jacobian[:, None] * covmat * jacobian[None, :]
+            # Ridge the covariance so the Cholesky stays well defined for chains
+            # with near-degenerate directions. The floor is relative to the mean
+            # marginal variance and sized for float32, whose eps is ~1e-7.
+            ridge = 1e-6 * tf.linalg.trace(covmat) / ndim
+            covmat = covmat + ridge * tf.eye(ndim, dtype=tf.float32)
+            bijectors.append(
+                tfp.bijectors.ScaleMatvecTriL(tf.linalg.cholesky(covmat))
+            )
+            # The whitened space has unit covariance by construction.
+            initial_step_size = tf.constant(1.0, dtype=tf.float32)
+
+        self.bijector = (
+            tfp.bijectors.Chain(bijectors) if bijectors else tfp.bijectors.Identity()
+        )
         self.initial_step_size = initial_step_size
 
         self._pos = None
@@ -60,6 +90,12 @@ class NUTSampler(BaseSampler):
         inner_kernel = tfp.mcmc.NoUTurnSampler(
             target_log_prob_fn=self.log_prob_fn,
             step_size=self.initial_step_size,
+            # TFP defaults to 10, allowing 1023 gradient evaluations in a single
+            # step. On targets whose curvature the whitening cannot capture the
+            # doubling runs away, and the long trajectories loop back without
+            # decorrelating: capping at 6 measured both faster and better mixed
+            # there, and makes no difference at all once the whitening fits.
+            max_tree_depth=6,
         )
 
         transformed_kernel = tfp.mcmc.TransformedTransitionKernel(
