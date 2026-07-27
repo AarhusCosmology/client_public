@@ -434,7 +434,7 @@ def main():
                 )
                 metrics_tracker.add_acquisition_metrics(
                     iteration=iteration,
-                    n_evaluated=len(new_inputs),
+                    n_evaluated=len(new_targets),
                     n_added=n_new_inputs,
                     acquisition_time=acquisition_elapsed_time,
                     dataset_size=len(dataset.inputs),
