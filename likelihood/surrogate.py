@@ -16,6 +16,8 @@ class SurrogateMetadata:
         param_names = likelihood.param_names
         param_labels = likelihood.param_labels
         param_scales = likelihood.param_scales
+        param_centers = likelihood.param_centers
+        param_sigmas = likelihood.param_sigmas
         bounds = likelihood.prior_bounds
 
         parameters = tuple(
@@ -25,8 +27,12 @@ class SurrogateMetadata:
                 scale=scale,
                 lower=bounds[name][0],
                 upper=bounds[name][1],
+                center=center,
+                sigma=sigma,
             )
-            for name, label, scale in zip(param_names, param_labels, param_scales)
+            for name, label, scale, center, sigma in zip(
+                param_names, param_labels, param_scales, param_centers, param_sigmas
+            )
         )
 
         return cls(parameters=parameters)
