@@ -137,6 +137,7 @@ def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_
         n_walkers_or_chains=n_walkers_or_chains,
         ndim=len(param_names),
         log_prob_fn=surrogate.logpost,
+        bounds=(lower, upper),
         **sampler_kwargs,
     )
     initial_positions = np.random.uniform(
