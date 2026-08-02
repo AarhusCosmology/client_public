@@ -99,7 +99,7 @@ def load_training_samples(run_dir, iteration, param_names):
     return pd.read_csv(data_path)[param_names].to_numpy()
 
 
-def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_bounds, param_names, surrogate, training_samples):
+def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_bounds, param_names, surrogate):
     import numpy as np
 
     from sampling.base import build_sampler
@@ -119,31 +119,25 @@ def load_or_run_chain(run_dir, iteration, sampling_config, n_steps, thin, prior_
         print(f"Loaded chain: {chain.shape}")
         return chain_path, chain, log_prob
 
-    n_walkers_or_chains = sampling_config["n_walkers_or_chains"]
+    n_walkers = sampling_config["n_walkers"]
     burn_in = sampling_config["burn_in"]
-    print(f"Running {sampler_name} sampler: {n_walkers_or_chains} walkers/chains, {burn_in} burn-in, {n_steps} steps")
+    print(f"Running {sampler_name} sampler: {n_walkers} walkers, {burn_in} burn-in, {n_steps} steps")
 
     lower = np.asarray([bounds[0] for bounds in prior_bounds.values()], dtype=np.float32)
     upper = np.asarray([bounds[1] for bounds in prior_bounds.values()], dtype=np.float32)
     if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)):
         raise ValueError("Benchmark sampling requires finite prior bounds for all parameters")
 
-    sampler_kwargs = {}
-    if training_samples is not None:
-        sampler_kwargs["covmat"] = np.diag(training_samples.var(axis=0))
-
     sampler = build_sampler(
         name=sampler_name,
-        n_walkers_or_chains=n_walkers_or_chains,
+        n_walkers=n_walkers,
         ndim=len(param_names),
         log_prob_fn=surrogate.logpost,
-        bounds=(lower, upper),
-        **sampler_kwargs,
     )
     initial_positions = np.random.uniform(
         low=lower,
         high=upper,
-        size=(n_walkers_or_chains, len(param_names)),
+        size=(n_walkers, len(param_names)),
     )
     sampler.run(initial_positions=initial_positions, n_steps=n_steps, burn_in=burn_in)
     chain = sampler.chain(thin=thin).numpy()
@@ -246,7 +240,6 @@ def main():
         prior_bounds,
         param_names,
         surrogate,
-        training_samples,
     )
     samples, surrogate_convergence_available = make_getdist_samples(
         chain,

@@ -91,7 +91,7 @@ class TrainingConfig:
 class SamplingConfig:
     sampler: str
     temperature: float
-    n_walkers_or_chains: int
+    n_walkers: int
     burn_in: int
     n_steps: int
 
@@ -100,7 +100,7 @@ class SamplingConfig:
         return cls(
             sampler=str(d["sampler"]),
             temperature=float(d["temperature"]),
-            n_walkers_or_chains=int(d["n_walkers_or_chains"]),
+            n_walkers=int(d["n_walkers"]),
             burn_in=int(d["burn_in"]),
             n_steps=int(d["n_steps"]),
         )

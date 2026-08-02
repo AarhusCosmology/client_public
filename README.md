@@ -360,9 +360,9 @@ training:
 ### Sampling Configuration
 ```yaml
 sampling:
-  sampler: aies             # aies, nuts or hmc
+  sampler: aies             # aies (only sampler currently implemented)
   temperature: 7.0          # MCMC temperature T_MCMC
-  n_walkers_or_chains: 216  # Walkers (aies) or independent chains (other samplers)
+  n_walkers: 216  # Number of AIES walkers (must be even)
   n_steps: 100000           # MCMC steps
   burn_in: 5000             # Burn-in steps to discard
 ```

@@ -30,7 +30,7 @@ training:
 sampling:
   sampler: aies
   temperature: 7.0
-  n_walkers_or_chains: 232
+  n_walkers: 232
   n_steps: 100000
   burn_in: 5000
 

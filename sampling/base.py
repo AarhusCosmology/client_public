@@ -23,30 +23,10 @@ class BaseSampler(ABC):
         pass
 
 
-def build_sampler(name, n_walkers_or_chains, ndim, log_prob_fn, covmat=None, bounds=None):
+def build_sampler(name, n_walkers, ndim, log_prob_fn):
     if name == "aies":
         from .aies import AIESampler
         return AIESampler(
-            n_walkers=n_walkers_or_chains, ndim=ndim, log_prob_fn=log_prob_fn
+            n_walkers=n_walkers, ndim=ndim, log_prob_fn=log_prob_fn
         )
-    if name == "nuts":
-        from .nuts import NUTSampler
-        return NUTSampler(
-            n_chains=n_walkers_or_chains,
-            ndim=ndim,
-            log_prob_fn=log_prob_fn,
-            covmat=covmat,
-            bounds=bounds,
-        )
-    if name == "hmc":
-        from .hmc import HMCSampler
-        return HMCSampler(
-            n_chains=n_walkers_or_chains,
-            ndim=ndim,
-            log_prob_fn=log_prob_fn,
-            covmat=covmat,
-            bounds=bounds,
-        )
-    raise ValueError(
-        f"Unknown sampler name: {name}. Available samplers: ['aies', 'nuts', 'hmc']"
-    )
+    raise ValueError(f"Unknown sampler name: {name}. Available samplers: ['aies']")

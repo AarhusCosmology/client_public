@@ -280,24 +280,16 @@ def main():
             def tempered_logpost_fn(positions):
                 return surrogate.logpost(positions) * inverse_sampling_temperature
 
-            if previous_chain_summary is not None:
-                covmat = previous_chain_summary["cov"]
-            else:
-                param_sigmas = np.asarray(likelihood.param_sigmas, dtype=float)
-                covmat = np.diag(cfg.sampling.temperature * param_sigmas**2)
-
             sampler = build_sampler(
                 name=cfg.sampling.sampler,
-                n_walkers_or_chains=cfg.sampling.n_walkers_or_chains,
+                n_walkers=cfg.sampling.n_walkers,
                 ndim=ndim,
                 log_prob_fn=tempered_logpost_fn,
-                covmat=covmat,
-                bounds=(prior_lower, prior_upper),
             )
             initial_positions = np.random.uniform(
                 low=prior_lower,
                 high=prior_upper,
-                size=(cfg.sampling.n_walkers_or_chains, ndim),
+                size=(cfg.sampling.n_walkers, ndim),
             )
             sampling_start_time = time.monotonic()
             sampler.run(
