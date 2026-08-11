@@ -125,9 +125,7 @@ class Run:
     def n_iterations(self):
         if self.requested_iterations is None:
             return self.config.convergence.max_iterations
-        return self.requested_iterations + (
-            1 if not self.is_new and not self.retrain else 0
-        )
+        return self.requested_iterations + (1 if not self.is_new else 0)
 
     @property
     def final_iteration(self):
