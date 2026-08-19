@@ -377,7 +377,6 @@ def main():
                     dataset=dataset,
                     chain=chain,
                     logposts=logposts,
-                    surrogate=surrogate,
                     n_append=cfg.acquisition.n_append,
                     mcmc_temperature=cfg.sampling.temperature,
                     pool_factor=cfg.acquisition.pool_factor,
@@ -395,6 +394,11 @@ def main():
                     f"Identified {n_unique} unique samples from {n_samples} total samples "
                     f"({n_duplicates} duplicates, unique fraction: {unique_fraction:.3g}, "
                     f"max multiplicity: {acq_metrics['max_multiplicity']})"
+                )
+                print_master(
+                    f"Estimated the target density from a "
+                    f"{acq_metrics['n_reference']}-point reference sample "
+                    f"({len(dataset.inputs)} training points)"
                 )
                 if len(new_samples) < cfg.acquisition.n_append:
                     print_master(

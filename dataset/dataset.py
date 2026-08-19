@@ -6,21 +6,26 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class _WhitenedKNN:
-    def __init__(self, points, n_neighbors):
+    def __init__(self, points, n_neighbors, transform=None):
         self.ndim = points.shape[1]
         self.n_neighbors = n_neighbors
-        self._mean = points.mean(axis=0)
-        cov = np.cov(points, rowvar=False)
+        if transform is None:
+            self._mean = points.mean(axis=0)
+            cov = np.cov(points, rowvar=False)
 
-        # Apply small jitter for numerical stability
-        # if any parameter has near-zero variance
-        cov = cov + 1e-10 * np.eye(self.ndim)
+            # Apply small jitter for numerical stability
+            # if any parameter has near-zero variance
+            cov = cov + 1e-10 * np.eye(self.ndim)
 
-        # Compute the Cholesky factor L where Σ = LL^T
-        L = np.linalg.cholesky(cov)
+            # Compute the Cholesky factor L where Σ = LL^T
+            L = np.linalg.cholesky(cov)
 
-        # For a row vector x, the whitening transform can be written as z = (x - μ) W, where W = L^{-T}
-        self._W = np.linalg.solve(L, np.eye(self.ndim)).T
+            # For a row vector x, the whitening transform can be written as z = (x - μ) W, where W = L^{-T}
+            self._W = np.linalg.solve(L, np.eye(self.ndim)).T
+        else:
+            # Reuse another index's whitening so that densities estimated over a
+            # different point cloud are measured in exactly the same metric.
+            self._mean, self._W = transform
 
         # Build a Euclidean nearest-neighbor index in whitened space
         # (e.g. a tree, or stored points for brute-force search depending on the algorithm)
@@ -28,6 +33,10 @@ class _WhitenedKNN:
             n_neighbors=n_neighbors, algorithm="auto", metric="euclidean"
         )
         self._knn_index.fit(self.whiten(points))
+
+    @property
+    def transform(self):
+        return self._mean, self._W
 
     def whiten(self, points):
         return (points - self._mean) @ self._W
